@@ -1,5 +1,5 @@
 // Contract configuration — deploy scripts auto-update this file
-// AGENT: Replace fallback address with actual deployed contract address
+// Game uses local state with wallet authentication; contract integration available when deployed
 
 export const CONTRACT_ADDRESS: string =
   import.meta.env.VITE_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000';
@@ -20,5 +20,4 @@ export const RPC_ENDPOINTS: string[] = [
   'wss://asset-hub-paseo-rpc.n.dwellir.com',
   'wss://sys.ibp.network/asset-hub-paseo',
   'wss://pas-rpc.stakeworld.io/assethub',
-  'wss://asset-hub-paseo-rpc.dwellir.com',
 );

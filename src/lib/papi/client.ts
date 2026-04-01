@@ -1,20 +1,21 @@
 // PAPI Client Singleton — survives React re-renders, single connection
-// In host mode (dotli/Triangle): uses host's chain provider via product-sdk
-// In standalone mode: probes multiple WS endpoints with timeout for resilience
+// Always uses direct WebSocket for chain queries (balance, account info).
+// The Triangle host does NOT support Paseo Asset Hub chain queries —
+// it only provides wallet signing + Statement Store access.
+// This matches the ignite repo pattern.
 import { createClient, AccountId } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws-provider/web";
 import { withPolkadotSdkCompat } from "polkadot-api/polkadot-sdk-compat";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 import { keccak256 } from "viem";
 import { RPC_ENDPOINTS } from "../contracts/config";
-import { isInTriangleHost } from "../triangle/hostDetection";
-import { WELL_KNOWN_CHAINS } from "../triangle/constants";
 
 let clientInstance: ReturnType<typeof createClient> | null = null;
 let apiInstance: any | null = null;
 let inkSdkInstance: ReturnType<typeof createInkSdk> | null = null;
 let activeEndpoint: string | null = null;
 let initPromise: Promise<void> | null = null;
+let initialized = false;
 
 function createClientForEndpoint(endpoint: string) {
   const provider = getWsProvider(endpoint);
@@ -25,38 +26,10 @@ function createClientForEndpoint(endpoint: string) {
 }
 
 /**
- * Initialize via host's chain provider (dotli or Triangle).
- * Uses createPapiProvider from product-sdk which communicates
- * through the host-container postMessage bridge.
- */
-async function initHostClient(): Promise<void> {
-  const { createPapiProvider } = await import("@novasamatech/product-sdk");
-  const genesisHash = WELL_KNOWN_CHAINS["paseo-asset-hub"];
-  const provider = createPapiProvider(genesisHash);
-  const client = createClient(provider);
-  const api = client.getUnsafeApi();
-  const inkSdk = createInkSdk(client);
-
-  // Verify connection with a simple query (5s timeout for host bridge)
-  await Promise.race([
-    api.query.System.Number.getValue(),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Host chain provider timeout")), 5000)
-    ),
-  ]);
-
-  clientInstance = client;
-  apiInstance = api;
-  inkSdkInstance = inkSdk;
-  activeEndpoint = "host-provider";
-  console.log("[PAPI] Connected via host chain provider");
-}
-
-/**
  * Initialize by racing all WS endpoints in parallel.
  * First endpoint that responds within 8s wins.
  */
-async function initStandaloneClient(): Promise<void> {
+async function initClient(): Promise<void> {
   // Race all endpoints in parallel — first to respond wins
   const racePromises = RPC_ENDPOINTS.map(async (endpoint) => {
     const { client, api, inkSdk } = createClientForEndpoint(endpoint);
@@ -100,33 +73,28 @@ async function initStandaloneClient(): Promise<void> {
 
 /**
  * Initialize the PAPI client. Safe to call multiple times.
- * In host mode: uses host's smoldot-backed chain provider (no WebSocket needed).
- * In standalone: probes WS endpoints with fallback.
+ * Always uses direct WebSocket — the Triangle host does not support
+ * Paseo Asset Hub for chain queries (only wallet signing + Statement Store).
  */
 export async function initPAPIClient(): Promise<void> {
   if (clientInstance) return;
   if (initPromise) return initPromise;
 
-  initPromise = (async () => {
-    if (isInTriangleHost()) {
-      try {
-        await initHostClient();
-        return;
-      } catch (err) {
-        console.warn(
-          "[PAPI] Host chain provider failed, falling back to WS:",
-          err instanceof Error ? err.message : err
-        );
-      }
-    }
-    await initStandaloneClient();
-  })();
+  initPromise = initClient();
 
   try {
     await initPromise;
+    initialized = true;
   } finally {
     initPromise = null;
   }
+}
+
+/**
+ * Returns true if the PAPI client has been initialized.
+ */
+export function isPAPIClientReady(): boolean {
+  return initialized && clientInstance !== null;
 }
 
 /**
@@ -146,13 +114,7 @@ export function getPAPIClient(): {
   inkSdk: ReturnType<typeof createInkSdk>;
 } {
   if (!clientInstance) {
-    const endpoint = RPC_ENDPOINTS[0];
-    const { client, api, inkSdk } = createClientForEndpoint(endpoint);
-    clientInstance = client;
-    apiInstance = api;
-    inkSdkInstance = inkSdk;
-    activeEndpoint = endpoint;
-    console.warn(`[PAPI] Eager init with: ${endpoint}`);
+    throw new Error('[PAPI] Client not initialized. Call initPAPIClient() first.');
   }
   return {
     client: clientInstance,
@@ -207,5 +169,6 @@ export function disconnectPAPIClient() {
     apiInstance = null;
     inkSdkInstance = null;
     activeEndpoint = null;
+    initialized = false;
   }
 }

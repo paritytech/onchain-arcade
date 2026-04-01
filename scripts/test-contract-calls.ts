@@ -8,9 +8,7 @@ import { Binary } from 'polkadot-api';
 import { encodeFunctionData } from 'viem';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as dotenv from 'dotenv';
-
-dotenv.config();
+try { const dotenv = await import('dotenv'); dotenv.config(); } catch { /* dotenv not installed, use process.env directly */ }
 
 const WS_URL = process.env.VITE_RPC_URL || 'wss://asset-hub-paseo-rpc.n.dwellir.com';
 

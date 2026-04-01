@@ -3,10 +3,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getWallets, type Wallet, type WalletAccount } from '@talismn/connect-wallets';
 import { getPolkadotSignerFromPjs } from 'polkadot-api/pjs-signer';
-import { getPAPIClient, ss58ToH160, disconnectPAPIClient, initChainClient } from '../lib/papi/client';
+import { AccountId } from 'polkadot-api';
+import { getPAPIClient, ss58ToH160, disconnectPAPIClient, initChainClient, isPAPIClientReady } from '../lib/papi/client';
 // NOTE: ss58ToH160 is synchronous (local keccak256, no RPC needed)
 import { isInTriangleHost } from '../lib/triangle';
 import { initStorage, getStorage } from '../lib/storage';
+import type { ProductAccountId } from '@novasamatech/product-sdk';
 
 const DAPP_NAME = 'Tick-tack-toe';
 const PAS_DECIMALS = 10;
@@ -14,6 +16,8 @@ const STORAGE_KEY_WALLET = 'Tick-tack-toe_wallet_name';
 const STORAGE_KEY_ACCOUNT = 'Tick-tack-toe_account_address';
 
 type WalletMode = 'detecting' | 'host' | 'standalone';
+
+type SignRawFn = (raw: { address: string; data: string; type: 'bytes' | 'payload' }) => Promise<{ signature: string }>;
 
 interface PolkadotWalletContextType {
   isConnected: boolean;
@@ -27,10 +31,15 @@ interface PolkadotWalletContextType {
   installedWallets: Wallet[];
   selectedWallet: Wallet | null;
   filteredEvmAccountsCount: number;
+  error: string | null;
+  /** ProductAccountId for Statement Store signing via host SDK. Null in standalone mode. */
+  productAccountId: ProductAccountId | null;
   connect: (wallet: Wallet) => Promise<void>;
   disconnect: () => void;
   selectAccount: (account: WalletAccount) => void;
   getSigner: () => ReturnType<typeof getPolkadotSignerFromPjs> | null;
+  getSignRaw: () => SignRawFn | null;
+  getPublicKey: () => Uint8Array | null;
   refreshBalance: () => Promise<void>;
   formatBalance: (amount?: bigint) => string;
   truncatedAddress: string | null;
@@ -76,6 +85,8 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
   const [isConnecting, setIsConnecting] = useState(false);
   const [mode, setMode] = useState<WalletMode>('detecting');
   const [filteredEvmAccountsCount, setFilteredEvmAccountsCount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [productAccountId, setProductAccountId] = useState<ProductAccountId | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const installedWallets = getWallets().filter(w => w.installed);
@@ -102,18 +113,21 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
       return ss58ToH160(ss58Address);
     } catch (error) {
       console.error('[Wallet] Error converting address:', error);
+      setError(error instanceof Error ? error.message : 'Failed to convert address');
       return null;
     }
   }, []);
 
-  // Fetch balance for an SS58 address
+  // Fetch balance for an SS58 address (only when chain client is ready)
   const fetchBalance = useCallback(async (ss58Address: string) => {
+    if (!isPAPIClientReady()) return;
     try {
       const { api } = getPAPIClient();
       const accountInfo = await api.query.System.Account.getValue(ss58Address);
       setBalance(accountInfo.data.free);
     } catch (error) {
       console.error('[Wallet] Error fetching balance:', error);
+      setError(error instanceof Error ? error.message : 'Failed to fetch balance');
       setBalance(0n);
     }
   }, []);
@@ -122,6 +136,13 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
   const connect = useCallback(async (selectedWallet: Wallet) => {
     setIsConnecting(true);
     try {
+      // Initialize chain client on first wallet connection (deferred from mount)
+      if (!isPAPIClientReady()) {
+        await initChainClient().catch((err) =>
+          console.error('[Wallet] Chain client init failed:', err)
+        );
+      }
+
       await selectedWallet.enable(DAPP_NAME);
       const walletAccounts = await selectedWallet.getAccounts();
       const { substrateAccounts, evmCount } = filterSubstrateAccounts(walletAccounts);
@@ -181,6 +202,22 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
     );
   }, [wallet, selectedAccount]);
 
+  // Get raw signing function for Statement Store submissions
+  const getSignRaw = useCallback((): SignRawFn | null => {
+    if (!wallet?.extension?.signer?.signRaw) return null;
+    return wallet.extension.signer.signRaw;
+  }, [wallet]);
+
+  // Get the 32-byte public key for the selected account
+  const getPublicKey = useCallback((): Uint8Array | null => {
+    if (!selectedAccount) return null;
+    try {
+      return AccountId().enc(selectedAccount.address);
+    } catch {
+      return null;
+    }
+  }, [selectedAccount]);
+
   // Format balance (10 decimals for PAS)
   const formatBalance = useCallback((amount?: bigint): string => {
     const value = amount ?? balance;
@@ -222,6 +259,13 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
       const savedWallet = wallets.find(w => w.installed && w.extensionName === savedWalletName);
       if (!savedWallet) return;
 
+      // Initialize chain client when restoring a saved wallet connection
+      if (!isPAPIClientReady()) {
+        await initChainClient().catch((err) =>
+          console.error('[Wallet] Chain client init failed:', err)
+        );
+      }
+
       await savedWallet.enable(DAPP_NAME);
       const walletAccounts = await savedWallet.getAccounts();
       const { substrateAccounts, evmCount } = filterSubstrateAccounts(walletAccounts);
@@ -238,6 +282,7 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
       setSelectedAccount(targetAccount);
     } catch (error) {
       console.error('[Wallet] Could not restore connection:', error);
+      setError(error instanceof Error ? error.message : 'Failed to restore wallet connection');
     }
   }, []);
 
@@ -304,35 +349,37 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
       setWallet(spektrWalletShim);
       setAccounts(substrateAccounts);
       setSelectedAccount(substrateAccounts[0]);
+      // Non-product account pattern (from ignite's toProductAccount): ['', 0]
+      setProductAccountId(['', 0] as ProductAccountId);
       setMode('host');
       console.log('[Wallet] Connected via Triangle host (Spektr)');
     } catch (error) {
       console.error('[Wallet] Host mode init failed, falling back to standalone:', error);
+      setError(error instanceof Error ? error.message : 'Host wallet initialization failed');
       setMode('standalone');
     }
   }, []);
 
-  // Main init effect — run wallet + chain client in parallel for fast startup
+  // Main init effect — detect wallet mode, defer chain client to when wallet connects
   useEffect(() => {
     const init = async () => {
       // Storage init is synchronous (no-op), but call it to satisfy the contract
       await initStorage();
 
-      // Determine mode immediately (sync check) — don't wait for chain client
+      // Determine mode immediately (sync check)
       const hostMode = isInTriangleHost();
 
-      // Run chain client + wallet setup in parallel — neither depends on the other
-      const chainClientPromise = initChainClient().catch((err) =>
-        console.error('[Wallet] Chain client init failed:', err)
-      );
-
       if (hostMode) {
-        // Host mode: start Spektr injection in parallel with chain client
+        // Host mode: init chain client + Spektr in parallel (host needs chain for Spektr)
+        const chainClientPromise = initChainClient().catch((err) =>
+          console.error('[Wallet] Chain client init failed:', err)
+        );
         await Promise.all([chainClientPromise, initHostMode()]);
       } else {
-        // Standalone mode: show Connect Wallet immediately, restore connection in parallel with chain client
+        // Standalone mode: show Connect Wallet immediately, restore wallet state
+        // Chain client is deferred until wallet actually connects (avoids WebSocket errors on load)
         setMode('standalone');
-        await Promise.all([chainClientPromise, restoreConnection()]);
+        await restoreConnection();
       }
     };
 
@@ -367,10 +414,14 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
         installedWallets,
         selectedWallet: wallet,
         filteredEvmAccountsCount,
+        error,
+        productAccountId,
         connect,
         disconnect,
         selectAccount,
         getSigner,
+        getSignRaw,
+        getPublicKey,
         refreshBalance,
         formatBalance,
         truncatedAddress,

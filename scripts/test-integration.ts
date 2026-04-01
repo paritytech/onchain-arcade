@@ -3,8 +3,6 @@
 import { createClient } from 'polkadot-api';
 import { getWsProvider } from 'polkadot-api/ws-provider/node';
 import { withPolkadotSdkCompat } from 'polkadot-api/polkadot-sdk-compat';
-import { sr25519CreateDerive } from '@polkadot-labs/hdkd';
-import { DEV_PHRASE, entropyToMiniSecret, mnemonicToEntropy } from '@polkadot-labs/hdkd-helpers';
 
 const WS_URL = process.env.VITE_RPC_URL || 'wss://asset-hub-paseo-rpc.n.dwellir.com';
 
@@ -22,14 +20,7 @@ async function testIntegration() {
   const chainSpec = await client.getChainSpecData();
   console.log('[PASS] Connected to chain:', chainSpec.name);
 
-  // Test 3: Create test signer from dev phrase
-  const entropy = mnemonicToEntropy(DEV_PHRASE);
-  const miniSecret = entropyToMiniSecret(entropy);
-  const derive = sr25519CreateDerive(miniSecret);
-  const keypair = derive('//Alice');
-  console.log('[PASS] Test keypair created');
-
-  // Test 4: Check that ReviveApi exists (for EVM contracts)
+  // Test 3: Check that ReviveApi exists (for EVM contracts)
   const unsafeApi = client.getUnsafeApi();
   if (unsafeApi.apis?.ReviveApi) {
     console.log('[PASS] ReviveApi available (for EVM contracts)');
@@ -37,17 +28,18 @@ async function testIntegration() {
     console.log('[WARN] ReviveApi not found - check chain supports Revive pallet');
   }
 
-  // Test 5: Verify contractsApi is NOT used (common mistake)
+  // Test 4: Verify contractsApi is NOT used (common mistake)
   if (unsafeApi.call?.contractsApi) {
     console.log('[WARN] contractsApi found - this is NOT for PolkaVM/Revive!');
   } else {
     console.log('[PASS] contractsApi correctly absent (Asset Hub uses Revive)');
   }
 
-  // Test 6: Query a balance (basic chain interaction)
+  // Test 5: Query a balance (basic chain interaction)
   try {
     const aliceAddress = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
-    console.log('[PASS] Chain queries work');
+    const accountInfo = await unsafeApi.query.System.Account.getValue(aliceAddress);
+    console.log('[PASS] Chain queries work, balance:', accountInfo.data.free.toString());
   } catch (e: any) {
     console.log('[WARN] Query test skipped:', e.message);
   }

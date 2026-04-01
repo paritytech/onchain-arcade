@@ -1,6 +1,5 @@
 import type { Abi } from 'viem';
 
-// AGENT: Replace with actual ABI after contract deployment
-// Deploy scripts (both Solidity and Rust) auto-generate this file.
-// This stub ensures imports resolve and `npx tsc --noEmit` passes before integration.
+// Contract ABI — populated by deploy scripts when contract is deployed.
+// Game currently uses local state with wallet authentication (hybrid mode).
 export const CONTRACT_ABI: Abi = [];

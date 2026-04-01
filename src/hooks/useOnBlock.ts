@@ -1,7 +1,7 @@
 // useOnBlock — fires callback on each new best block (~2s on Asset Hub)
 // Replaces setInterval-based polling with event-driven updates.
 import { useEffect, useRef } from 'react';
-import { getPAPIClient } from '../lib/papi/client';
+import { getPAPIClient, isPAPIClientReady } from '../lib/papi/client';
 
 /**
  * Runs `callback` whenever a new best block arrives.
@@ -21,17 +21,22 @@ export function useOnBlock(
   callbackRef.current = callback;
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !isPAPIClientReady()) return;
 
-    const { client } = getPAPIClient();
-    const subscription = client.bestBlocks$.subscribe((blocks) => {
-      const now = Date.now();
-      if (now - lastRunRef.current < minIntervalMs) return; // throttle
-      lastRunRef.current = now;
-      const latest = blocks[blocks.length - 1];
-      callbackRef.current(latest?.number ?? 0);
-    });
+    let subscription: { unsubscribe: () => void } | null = null;
+    try {
+      const { client } = getPAPIClient();
+      subscription = client.bestBlocks$.subscribe((blocks) => {
+        const now = Date.now();
+        if (now - lastRunRef.current < minIntervalMs) return; // throttle
+        lastRunRef.current = now;
+        const latest = blocks[blocks.length - 1];
+        callbackRef.current(latest?.number ?? 0);
+      });
+    } catch {
+      // Client not ready yet — will subscribe on next effect cycle
+    }
 
-    return () => subscription.unsubscribe();
+    return () => subscription?.unsubscribe();
   }, [enabled, minIntervalMs]);
 }

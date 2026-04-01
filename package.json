@@ -6,30 +6,33 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "relay": "node server/relay.js"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "@novasamatech/product-sdk": "^0.6.6-1",
+    "@polkadot-api/sdk-ink": "^0.5.0",
+    "@talismn/connect-wallets": "^1.2.0",
     "clsx": "^2.1.1",
     "framer-motion": "^11.15.0",
     "lucide-react": "^0.460.0",
     "polkadot-api": "^1.8.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "react-router-dom": "^7.1.0",
     "tailwind-merge": "^2.6.0",
-    "@polkadot-api/sdk-ink": "^0.5.0",
-    "@talismn/connect-wallets": "^1.2.0",
-    "@novasamatech/product-sdk": "^0.6.6-1",
-    "viem": "^2.21.0"
+    "viem": "^2.21.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
-    "typescript": "^5.6.3",
-    "vite": "^6.0.3"
+    "typescript": "^5.9.3",
+    "vite": "^6.4.1",
+    "vitest": "^3.2.4"
   }
 }

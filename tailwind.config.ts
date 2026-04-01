@@ -35,6 +35,12 @@ const config: Config = {
           active: '#cc0040',
           soft: 'rgba(255, 40, 103, 0.1)',
         },
+        // Brand color - used for primary highlights, game accents, active states
+        brand: {
+          DEFAULT: 'var(--color-brand)',
+          hover: 'var(--color-brand-hover)',
+          soft: 'var(--color-brand-soft)',
+        },
         // Semantic colors
         success: '#059669',
         error: '#dc2626',
