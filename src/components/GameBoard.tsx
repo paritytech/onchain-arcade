@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/cn'
-import type { CellValue, PlayerSymbol } from '@/types/game'
+import type { CellValue, PlayerSymbol, GridSize } from '@/types/game'
 
 interface GameBoardProps {
   board: CellValue[]
+  gridSize: GridSize
   currentTurn: PlayerSymbol
   winningLine: number[] | null
   isMyTurn: boolean
@@ -11,11 +12,11 @@ interface GameBoardProps {
   onCellClick: (index: number) => void
 }
 
-function XMark({ isWinning }: { isWinning: boolean }) {
+function XMark({ isWinning, small }: { isWinning: boolean; small?: boolean }) {
   return (
     <motion.svg
       viewBox="0 0 64 64"
-      className={cn('w-10 h-10 md:w-14 md:h-14', isWinning ? 'text-brand' : 'text-text-primary')}
+      className={cn(small ? 'w-6 h-6' : 'w-10 h-10 md:w-14 md:h-14', isWinning ? 'text-brand' : 'text-text-primary')}
       initial={{ scale: 0, rotate: -180 }}
       animate={{ scale: 1, rotate: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 20 }}
@@ -42,11 +43,11 @@ function XMark({ isWinning }: { isWinning: boolean }) {
   )
 }
 
-function OMark({ isWinning }: { isWinning: boolean }) {
+function OMark({ isWinning, small }: { isWinning: boolean; small?: boolean }) {
   return (
     <motion.svg
       viewBox="0 0 64 64"
-      className={cn('w-10 h-10 md:w-14 md:h-14', isWinning ? 'text-brand' : 'text-text-secondary')}
+      className={cn(small ? 'w-6 h-6' : 'w-10 h-10 md:w-14 md:h-14', isWinning ? 'text-brand' : 'text-text-secondary')}
       initial={{ scale: 0 }}
       animate={{ scale: 1 }}
       transition={{ type: 'spring', stiffness: 300, damping: 20 }}
@@ -65,29 +66,23 @@ function OMark({ isWinning }: { isWinning: boolean }) {
   )
 }
 
-const WINNING_LINES = [
-  [0, 1, 2], [3, 4, 5], [6, 7, 8],
-  [0, 3, 6], [1, 4, 7], [2, 5, 8],
-  [0, 4, 8], [2, 4, 6],
-]
-
-function getWinningLine(board: CellValue[]): number[] | null {
-  for (const [a, b, c] of WINNING_LINES) {
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      return [a, b, c]
-    }
-  }
-  return null
+const cellSizes: Record<GridSize, string> = {
+  3: 'w-24 h-24 md:w-28 md:h-28',
+  5: 'w-16 h-16 md:w-20 md:h-20',
+  7: 'w-12 h-12 md:w-16 md:h-16',
 }
 
-export function GameBoard({ board, winningLine, isMyTurn, isPlayable, onCellClick }: GameBoardProps) {
-  const resolvedWinLine = winningLine ?? getWinningLine(board)
+export function GameBoard({ board, gridSize, winningLine, isMyTurn, isPlayable, onCellClick }: GameBoardProps) {
+  const small = gridSize >= 5
 
   return (
     <div className="relative">
-      <div className="grid grid-cols-3 gap-2 md:gap-3 w-fit mx-auto">
+      <div
+        className="grid gap-1.5 md:gap-2 w-fit mx-auto"
+        style={{ gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))` }}
+      >
         {board.map((cell, index) => {
-          const isWinning = resolvedWinLine?.includes(index) ?? false
+          const isWinning = winningLine?.includes(index) ?? false
           const isEmpty = cell === null
           const canClick = isEmpty && isMyTurn && isPlayable
 
@@ -99,7 +94,8 @@ export function GameBoard({ board, winningLine, isMyTurn, isPlayable, onCellClic
               whileHover={canClick ? { scale: 1.05 } : undefined}
               whileTap={canClick ? { scale: 0.95 } : undefined}
               className={cn(
-                'w-24 h-24 md:w-28 md:h-28 rounded-xl flex items-center justify-center',
+                cellSizes[gridSize],
+                'rounded-xl flex items-center justify-center',
                 'border-2 transition-all duration-200',
                 isWinning
                   ? 'border-brand bg-brand-soft shadow-lg shadow-brand/20'
@@ -113,8 +109,8 @@ export function GameBoard({ board, winningLine, isMyTurn, isPlayable, onCellClic
                   : `Cell ${index + 1}: empty${canClick ? ', click to place your mark' : ''}`
               }
             >
-              {cell === 'X' && <XMark isWinning={isWinning} />}
-              {cell === 'O' && <OMark isWinning={isWinning} />}
+              {cell === 'X' && <XMark isWinning={isWinning} small={small} />}
+              {cell === 'O' && <OMark isWinning={isWinning} small={small} />}
             </motion.button>
           )
         })}

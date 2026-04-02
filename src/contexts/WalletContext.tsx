@@ -26,6 +26,10 @@ interface PolkadotWalletContextType {
   address: string | null;
   h160Address: string | null;
   accountName: string | null;
+  /** DotNS alias from getNonProductAccounts() (e.g. "pranay.23"). Null in standalone mode. */
+  accountAlias: string | null;
+  /** Display name: alias if available, otherwise accountName, otherwise truncated address. */
+  displayName: string | null;
   balance: bigint;
   accounts: WalletAccount[];
   installedWallets: Wallet[];
@@ -87,6 +91,7 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
   const [filteredEvmAccountsCount, setFilteredEvmAccountsCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [productAccountId, setProductAccountId] = useState<ProductAccountId | null>(null);
+  const [accountAlias, setAccountAlias] = useState<string | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const installedWallets = getWallets().filter(w => w.installed);
@@ -353,6 +358,23 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
       setProductAccountId(['', 0] as ProductAccountId);
       setMode('host');
       console.log('[Wallet] Connected via Triangle host (Spektr)');
+
+      // Resolve DotNS alias via createAccountsProvider
+      try {
+        const { createAccountsProvider } = await import('@novasamatech/product-sdk');
+        const accountsProvider = createAccountsProvider();
+        const result = accountsProvider.getNonProductAccounts();
+        const accounts = await result.match(
+          (accs: { publicKey: Uint8Array; name: string | undefined }[]) => accs,
+          () => [] as { publicKey: Uint8Array; name: string | undefined }[],
+        );
+        if (accounts.length > 0 && accounts[0].name) {
+          setAccountAlias(accounts[0].name);
+          console.log('[Wallet] DotNS alias:', accounts[0].name);
+        }
+      } catch (err) {
+        console.warn('[Wallet] Could not resolve DotNS alias:', err);
+      }
     } catch (error) {
       console.error('[Wallet] Host mode init failed, falling back to standalone:', error);
       setError(error instanceof Error ? error.message : 'Host wallet initialization failed');
@@ -400,6 +422,9 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
     ? `${selectedAccount.address.slice(0, 6)}...${selectedAccount.address.slice(-4)}`
     : null;
 
+  const accountName = selectedAccount?.name || null;
+  const displayName = accountAlias || accountName || truncatedAddress;
+
   return (
     <PolkadotWalletContext.Provider
       value={{
@@ -408,7 +433,9 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
         mode,
         address: selectedAccount?.address || null,
         h160Address,
-        accountName: selectedAccount?.name || null,
+        accountName,
+        accountAlias,
+        displayName,
         balance,
         accounts,
         installedWallets,

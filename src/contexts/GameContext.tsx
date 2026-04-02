@@ -2,30 +2,20 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { usePolkadotWallet } from '@/contexts/WalletContext'
 import { useNotifications } from '@/contexts/NotificationProvider'
 import { statementStore, type DerivedGame } from '@/lib/statementStore'
-import type { GameStatement, PlayerSymbol } from '@/types/game'
+import type { GameStatement, PlayerSymbol, GridSize } from '@/types/game'
 import { generateGameId } from '@/types/game'
 
 export type { DerivedGame as Game } from '@/lib/statementStore'
 
-export interface LeaderboardEntry {
-  address: string
-  wins: number
-  losses: number
-  draws: number
-  totalGames: number
-}
-
 interface GameContextType {
   games: DerivedGame[]
   activeGame: DerivedGame | null
-  leaderboard: LeaderboardEntry[]
   isLoading: boolean
-  createGame: () => Promise<string | null>
+  createGame: (gridSize?: GridSize) => Promise<string | null>
   joinGame: (gameId: string, hostAddress?: string) => Promise<boolean>
   makeMove: (gameId: string, cellIndex: number) => Promise<boolean>
   loadGame: (gameId: string) => void
   leaveGame: () => void
-  getPlayerStats: (address: string) => LeaderboardEntry | null
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined)
@@ -47,7 +37,7 @@ function useStatementStoreGames(): DerivedGame[] {
 }
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
-  const { isConnected, address, productAccountId } = usePolkadotWallet()
+  const { isConnected, address, productAccountId, displayName } = usePolkadotWallet()
   const { addNotification } = useNotifications()
   const games = useStatementStoreGames()
   const [activeGameId, setActiveGameId] = useState<string | null>(null)
@@ -77,7 +67,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // RPC connection is lazy — only opened when a game is created, joined, or loaded.
   // No always-on subscription from app startup.
 
-  const createGame = useCallback(async (): Promise<string | null> => {
+  const createGame = useCallback(async (gridSize: GridSize = 3): Promise<string | null> => {
     if (!isConnected || !address) {
       addNotification('error', 'Connect your wallet to create a game')
       return null
@@ -93,11 +83,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         type: 'create_game',
         gameId,
         playerX: address,
+        playerXName: displayName || undefined,
+        gridSize: gridSize !== 3 ? gridSize : undefined,
         timestamp: Date.now(),
       }
 
-      // Apply locally — network broadcast happens via statement store subscription
-      statementStore.applyLocal(stmt)
+      // Submit to network so the opponent receives playerXName via subscription
+      statementStore.applyAndSubmit(stmt)
       setActiveGameId(gameId)
       prevMoveCountRef.current = 0
       addNotification('success', `Game created! Share code: ${gameId}`)
@@ -109,7 +101,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [isConnected, address, productAccountId, addNotification])
+  }, [isConnected, address, productAccountId, displayName, addNotification])
 
   const joinGame = useCallback(async (gameId: string, hostAddress?: string): Promise<boolean> => {
     if (!isConnected || !address) {
@@ -165,6 +157,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         type: 'create_game',
         gameId: normalizedId,
         playerX,
+        playerXName: game?.playerXName || undefined,
         timestamp: game?.createdAt ?? Date.now() - 1,
       }
       statementStore.applyAndSubmit(createStmt)
@@ -174,6 +167,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         type: 'join_game',
         gameId: normalizedId,
         playerO: address,
+        playerOName: displayName || undefined,
         timestamp: Date.now(),
       }
       statementStore.applyAndSubmit(joinStmt)
@@ -188,7 +182,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [isConnected, address, productAccountId, addNotification])
+  }, [isConnected, address, productAccountId, displayName, addNotification])
 
   const makeMove = useCallback(async (gameId: string, cellIndex: number): Promise<boolean> => {
     if (!isConnected || !address) return false
@@ -240,63 +234,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setActiveGameId(null)
   }, [])
 
-
-  const getPlayerStats = useCallback((playerAddress: string): LeaderboardEntry | null => {
-    const playerGames = games.filter(
-      g => g.status === 'finished' &&
-        (g.playerX === playerAddress || g.playerO === playerAddress)
-    )
-    if (playerGames.length === 0) return null
-
-    let wins = 0
-    let losses = 0
-    let draws = 0
-
-    for (const g of playerGames) {
-      const isX = g.playerX === playerAddress
-      if (g.result === 'draw') {
-        draws++
-      } else if ((g.result === 'x_wins' && isX) || (g.result === 'o_wins' && !isX)) {
-        wins++
-      } else {
-        losses++
-      }
-    }
-
-    return { address: playerAddress, wins, losses, draws, totalGames: playerGames.length }
-  }, [games])
-
-  const leaderboard: LeaderboardEntry[] = React.useMemo(() => {
-    const addressSet = new Set<string>()
-    for (const g of games) {
-      if (g.status === 'finished') {
-        addressSet.add(g.playerX)
-        if (g.playerO) addressSet.add(g.playerO)
-      }
-    }
-
-    const entries: LeaderboardEntry[] = []
-    for (const addr of addressSet) {
-      const stats = getPlayerStats(addr)
-      if (stats) entries.push(stats)
-    }
-
-    return entries.sort((a, b) => b.wins - a.wins || a.losses - b.losses)
-  }, [games, getPlayerStats])
-
   return (
     <GameContext.Provider
       value={{
         games,
         activeGame,
-        leaderboard,
         isLoading,
         createGame,
         joinGame,
         makeMove,
         loadGame,
         leaveGame,
-        getPlayerStats,
       }}
     >
       {children}

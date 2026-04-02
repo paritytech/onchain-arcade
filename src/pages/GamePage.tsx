@@ -30,17 +30,22 @@ export function GamePage() {
     return () => leaveGame()
   }, [gameId, loadGame, leaveGame])
 
-  // Detect when game is not found after load attempt
+  // Auto-join when arriving via share link with host param and game not found locally
+  const [autoJoinAttempted, setAutoJoinAttempted] = useState(false)
   useEffect(() => {
-    if (gameId && !activeGame) {
-      // Give loadGame a tick to complete, then check
-      const timer = setTimeout(() => {
-        if (!activeGame) setGameNotFound(true)
+    if (gameId && !activeGame && !autoJoinAttempted) {
+      const timer = setTimeout(async () => {
+        if (!activeGame && hostAddress && isConnected) {
+          setAutoJoinAttempted(true)
+          await joinGame(gameId, hostAddress)
+        } else if (!activeGame) {
+          setGameNotFound(true)
+        }
       }, 100)
       return () => clearTimeout(timer)
     }
     if (activeGame) setGameNotFound(false)
-  }, [gameId, activeGame])
+  }, [gameId, activeGame, hostAddress, isConnected, autoJoinAttempted, joinGame])
 
   const handleJoinGame = async () => {
     if (!gameId) return
@@ -138,36 +143,35 @@ export function GamePage() {
         className="flex flex-col items-center justify-center py-20"
       >
         <motion.div variants={staggerItem} className="text-center max-w-md">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-grey-800/50 flex items-center justify-center">
-            <Gamepad2 className="w-8 h-8 text-grey-400" />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-brand/10 flex items-center justify-center">
+            <Gamepad2 className="w-8 h-8 text-brand" />
           </div>
-          <h2 className="font-serif text-h3 text-text-primary mb-2">Game Not Found Locally</h2>
-          <p className="text-text-secondary mb-2">
-            Game <span className="font-mono text-brand">{gameId}</span> isn&apos;t in this browser yet.
-          </p>
-          {hostAddress ? (
-            <p className="text-text-secondary mb-6">
-              Click below to join this game as Player O.
-            </p>
+          {hostAddress && isConnected ? (
+            <>
+              <h2 className="font-serif text-h3 text-text-primary mb-2">Joining as Player O...</h2>
+              <p className="text-text-secondary mb-6">
+                Connecting to game <span className="font-mono text-brand">{gameId}</span>
+              </p>
+              <LoadingSpinner size="md" />
+            </>
+          ) : !isConnected ? (
+            <>
+              <h2 className="font-serif text-h3 text-text-primary mb-2">Connect Wallet</h2>
+              <p className="text-text-secondary mb-6">
+                Connect your wallet to join game <span className="font-mono text-brand">{gameId}</span>
+              </p>
+            </>
           ) : (
-            <p className="text-text-secondary mb-6">
-              If someone shared this code, ask them to share the full game link (with the host parameter) so you can join.
-            </p>
+            <>
+              <h2 className="font-serif text-h3 text-text-primary mb-2">Game Not Found</h2>
+              <p className="text-text-secondary mb-6">
+                Game <span className="font-mono text-brand">{gameId}</span> could not be found. Ask the host to share the full game link.
+              </p>
+              <Button variant="secondary" onClick={() => navigate('/')}>
+                Home
+              </Button>
+            </>
           )}
-          <div className="flex gap-3 justify-center">
-            {isConnected && hostAddress ? (
-              <Button variant="primary" onClick={handleJoinGame} isLoading={isLoading}>
-                Join Game
-              </Button>
-            ) : !isConnected ? (
-              <Button variant="primary" disabled>
-                Connect Wallet to Join
-              </Button>
-            ) : null}
-            <Button variant="secondary" onClick={() => navigate('/')}>
-              Go Home
-            </Button>
-          </div>
         </motion.div>
       </motion.div>
     )
@@ -247,6 +251,29 @@ export function GamePage() {
         </div>
       </motion.div>
 
+      {/* Join banner for spectators — prominent placement before the board */}
+      {activeGame.status === 'waiting' && !playerRole && isConnected && (
+        <motion.div variants={staggerItem}>
+          <div className="p-px rounded-2xl bg-gradient-to-br from-brand/50 via-brand/20 to-border">
+            <div className="bg-surface rounded-[15px] p-5 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-body-sm font-semibold text-text-primary">This game needs a second player</p>
+                <p className="text-caption text-text-secondary">Join now to play as O</p>
+              </div>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleJoinGame}
+                isLoading={isLoading}
+                leftIcon={<UserPlus className="w-4 h-4" />}
+              >
+                Join as Player O
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Players */}
       <motion.div variants={staggerItem} className="grid grid-cols-2 gap-4">
         <Card className={activeGame.currentTurn === 'X' && activeGame.status === 'playing' ? 'ring-2 ring-brand' : ''}>
@@ -255,7 +282,7 @@ export function GamePage() {
             <p className="text-caption text-text-secondary truncate">
               {activeGame.playerX === address
                 ? 'You'
-                : truncateAddress(activeGame.playerX)}
+                : activeGame.playerXName || truncateAddress(activeGame.playerX)}
             </p>
           </CardContent>
         </Card>
@@ -266,7 +293,7 @@ export function GamePage() {
               {activeGame.playerO
                 ? activeGame.playerO === address
                   ? 'You'
-                  : truncateAddress(activeGame.playerO)
+                  : activeGame.playerOName || truncateAddress(activeGame.playerO)
                 : 'Waiting...'}
             </p>
           </CardContent>
@@ -277,6 +304,7 @@ export function GamePage() {
       <motion.div variants={staggerItem} className="flex justify-center">
         <GameBoard
           board={activeGame.board}
+          gridSize={activeGame.gridSize}
           currentTurn={activeGame.currentTurn}
           winningLine={activeGame.winningLine}
           isMyTurn={isMyTurn}
@@ -302,27 +330,13 @@ export function GamePage() {
           <Button
             variant="secondary"
             size="lg"
-            onClick={() => navigate('/games')}
+            onClick={() => navigate('/')}
           >
-            View All Games
+            Home
           </Button>
         </motion.div>
       )}
 
-      {/* Join button for spectators viewing a waiting game from another browser */}
-      {activeGame.status === 'waiting' && !playerRole && isConnected && (
-        <motion.div variants={staggerItem} className="flex justify-center">
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={handleJoinGame}
-            isLoading={isLoading}
-            leftIcon={<UserPlus className="w-5 h-5" />}
-          >
-            Join as Player O
-          </Button>
-        </motion.div>
-      )}
 
       {/* Waiting hint for game creator */}
       {activeGame.status === 'waiting' && playerRole && isConnected && (

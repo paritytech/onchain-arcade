@@ -8,8 +8,9 @@ import type {
   GameResult,
   GameStatus,
   PlayerSymbol,
+  GridSize,
 } from '@/types/game'
-import { EMPTY_BOARD, checkWinner, isBoardFull } from '@/types/game'
+import { emptyBoard, checkWinner, isBoardFull } from '@/types/game'
 import type { ProductAccountId } from '@novasamatech/product-sdk'
 import { statementStoreRpc } from './statementStoreRpc'
 import { statementStoreHost } from './statementStoreHost'
@@ -17,9 +18,12 @@ import { isInTriangleHost } from './triangle/hostDetection'
 
 export interface DerivedGame {
   id: string
+  gridSize: GridSize
   board: BoardState
   playerX: string
+  playerXName: string | null
   playerO: string | null
+  playerOName: string | null
   currentTurn: PlayerSymbol
   status: GameStatus
   result: GameResult
@@ -58,8 +62,10 @@ function deriveGame(gameId: string, stmts: GameStatement[]): DerivedGame | null 
   const create = relevant.find(s => s.type === 'create_game')
   if (!create || create.type !== 'create_game') return null
 
-  const board: BoardState = [...EMPTY_BOARD] as BoardState
+  const gridSize: GridSize = create.gridSize || 3
+  const board: BoardState = emptyBoard(gridSize)
   let playerO: string | null = null
+  let playerOName: string | null = null
   let status: GameStatus = 'waiting'
   let result: GameResult = null
   let winningLine: number[] | null = null
@@ -69,6 +75,7 @@ function deriveGame(gameId: string, stmts: GameStatement[]): DerivedGame | null 
   for (const stmt of relevant) {
     if (stmt.type === 'join_game') {
       playerO = stmt.playerO
+      playerOName = stmt.playerOName ?? null
       status = 'playing'
       updatedAt = stmt.timestamp
     } else if (stmt.type === 'make_move') {
@@ -84,7 +91,7 @@ function deriveGame(gameId: string, stmts: GameStatement[]): DerivedGame | null 
       moveCount++
       updatedAt = stmt.timestamp
 
-      const { winner, line } = checkWinner(board)
+      const { winner, line } = checkWinner(board, gridSize)
       if (winner) {
         result = winner === 'X' ? 'x_wins' : 'o_wins'
         winningLine = line
@@ -98,9 +105,12 @@ function deriveGame(gameId: string, stmts: GameStatement[]): DerivedGame | null 
 
   return {
     id: gameId,
+    gridSize,
     board,
     playerX: create.playerX,
+    playerXName: create.playerXName ?? null,
     playerO,
+    playerOName,
     currentTurn: moveCount % 2 === 0 ? 'X' : 'O',
     status,
     result,

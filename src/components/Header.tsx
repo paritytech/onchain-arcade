@@ -8,16 +8,14 @@ import { truncateAddress } from '@/lib/utils'
 
 export function Header() {
   const { theme, toggleTheme } = useTheme()
-  const { isConnected, address, disconnect, formatBalance, balance, refreshBalance } = usePolkadotWallet()
+  const { isConnected, address, displayName, disconnect, formatBalance, balance, refreshBalance } = usePolkadotWallet()
   const [showWallet, setShowWallet] = useState(false)
 
   return (
     <>
       <header className="sticky top-0 z-40 bg-white/95 dark:bg-grey-950/95 backdrop-blur-xl border-b border-border">
-        <div className="px-6 h-16 flex items-center justify-between md:ml-64">
-          <div className="pl-10 md:pl-0">
-            <h1 className="text-lg font-serif text-text-primary">Tic-Tac-Toe</h1>
-          </div>
+        <div className="px-6 h-16 flex items-center justify-between">
+          <div />
           <div className="flex items-center gap-3">
             <button
               onClick={toggleTheme}
@@ -39,8 +37,8 @@ export function Header() {
                 >
                   {formatBalance(balance)}
                 </button>
-                <span className="hidden sm:inline text-body-sm text-text-secondary font-mono">
-                  {truncateAddress(address)}
+                <span className={`hidden sm:inline text-body-sm text-text-secondary ${displayName && displayName === address ? 'font-mono' : ''}`}>
+                  {displayName || truncateAddress(address)}
                 </span>
                 <Button
                   variant="ghost"
