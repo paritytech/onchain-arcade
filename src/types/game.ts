@@ -4,6 +4,7 @@ export type GameStatus = 'waiting' | 'playing' | 'finished';
 export type GameResult = 'x_wins' | 'o_wins' | 'draw' | null;
 export type PlayerSymbol = 'X' | 'O';
 export type GridSize = 3 | 5 | 7;
+export type GameType = 'tic-tac-toe' | 'connect-four' | 'nim';
 
 /** Win-length required for each grid size */
 export const WIN_LENGTH: Record<GridSize, number> = { 3: 3, 5: 4, 7: 5 };
@@ -81,7 +82,9 @@ export interface CreateGameStatement {
   gameId: string
   playerX: string
   playerXName?: string
+  gameType?: GameType
   gridSize?: GridSize
+  nimConfig?: number[]
   timestamp: number
 }
 
@@ -97,7 +100,9 @@ export interface MakeMoveStatement {
   type: 'make_move'
   gameId: string
   player: string
-  cellIndex: number
+  cellIndex?: number
+  column?: number
+  nimMove?: { heap: number; count: number }
   timestamp: number
 }
 

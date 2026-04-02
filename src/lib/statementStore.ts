@@ -3,23 +3,25 @@
 // received in real-time via subscription. localStorage serves as a local cache.
 
 import type {
-  BoardState,
   GameStatement,
   GameResult,
   GameStatus,
   PlayerSymbol,
+  GameType,
   GridSize,
+  CellValue,
 } from '@/types/game'
-import { emptyBoard, checkWinner, isBoardFull } from '@/types/game'
 import type { ProductAccountId } from '@novasamatech/product-sdk'
 import { statementStoreRpc } from './statementStoreRpc'
 import { statementStoreHost } from './statementStoreHost'
 import { isInTriangleHost } from './triangle/hostDetection'
+import { deriveGame } from './games'
 
-export interface DerivedGame {
+// --- DerivedGame discriminated union ---
+
+interface DerivedGameBase {
   id: string
-  gridSize: GridSize
-  board: BoardState
+  gameType: GameType
   playerX: string
   playerXName: string | null
   playerO: string | null
@@ -27,11 +29,31 @@ export interface DerivedGame {
   currentTurn: PlayerSymbol
   status: GameStatus
   result: GameResult
-  winningLine: number[] | null
   moveCount: number
   createdAt: number
   updatedAt: number
 }
+
+export interface DerivedTicTacToe extends DerivedGameBase {
+  gameType: 'tic-tac-toe'
+  gridSize: GridSize
+  board: CellValue[]
+  winningLine: number[] | null
+}
+
+export interface DerivedConnectFour extends DerivedGameBase {
+  gameType: 'connect-four'
+  board: CellValue[]
+  winningLine: number[] | null
+}
+
+export interface DerivedNim extends DerivedGameBase {
+  gameType: 'nim'
+  heaps: number[]
+  lastMove: { heap: number; count: number } | null
+}
+
+export type DerivedGame = DerivedTicTacToe | DerivedConnectFour | DerivedNim
 
 type Listener = () => void
 
@@ -51,73 +73,6 @@ function saveStatements(stmts: GameStatement[]) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stmts))
   } catch {
     // storage full
-  }
-}
-
-/** Derive a single game's state from its ordered statements. */
-function deriveGame(gameId: string, stmts: GameStatement[]): DerivedGame | null {
-  const relevant = stmts.filter(s => s.gameId === gameId)
-  if (relevant.length === 0) return null
-
-  const create = relevant.find(s => s.type === 'create_game')
-  if (!create || create.type !== 'create_game') return null
-
-  const gridSize: GridSize = create.gridSize || 3
-  const board: BoardState = emptyBoard(gridSize)
-  let playerO: string | null = null
-  let playerOName: string | null = null
-  let status: GameStatus = 'waiting'
-  let result: GameResult = null
-  let winningLine: number[] | null = null
-  let moveCount = 0
-  let updatedAt = create.timestamp
-
-  for (const stmt of relevant) {
-    if (stmt.type === 'join_game') {
-      playerO = stmt.playerO
-      playerOName = stmt.playerOName ?? null
-      status = 'playing'
-      updatedAt = stmt.timestamp
-    } else if (stmt.type === 'make_move') {
-      if (status !== 'playing') continue
-      if (board[stmt.cellIndex] !== null) continue
-
-      const isX = stmt.player === create.playerX
-      const symbol: PlayerSymbol = isX ? 'X' : 'O'
-      const expectedTurn: PlayerSymbol = moveCount % 2 === 0 ? 'X' : 'O'
-      if (symbol !== expectedTurn) continue
-
-      board[stmt.cellIndex] = symbol
-      moveCount++
-      updatedAt = stmt.timestamp
-
-      const { winner, line } = checkWinner(board, gridSize)
-      if (winner) {
-        result = winner === 'X' ? 'x_wins' : 'o_wins'
-        winningLine = line
-        status = 'finished'
-      } else if (isBoardFull(board)) {
-        result = 'draw'
-        status = 'finished'
-      }
-    }
-  }
-
-  return {
-    id: gameId,
-    gridSize,
-    board,
-    playerX: create.playerX,
-    playerXName: create.playerXName ?? null,
-    playerO,
-    playerOName,
-    currentTurn: moveCount % 2 === 0 ? 'X' : 'O',
-    status,
-    result,
-    winningLine,
-    moveCount,
-    createdAt: create.timestamp,
-    updatedAt,
   }
 }
 
@@ -298,7 +253,13 @@ class StatementStore {
       if (s.type !== stmt.type || s.gameId !== stmt.gameId || s.timestamp !== stmt.timestamp) return false
       if (s.type === 'create_game' && stmt.type === 'create_game') return s.playerX === stmt.playerX
       if (s.type === 'join_game' && stmt.type === 'join_game') return s.playerO === stmt.playerO
-      if (s.type === 'make_move' && stmt.type === 'make_move') return s.cellIndex === stmt.cellIndex && s.player === stmt.player
+      if (s.type === 'make_move' && stmt.type === 'make_move') {
+        if (s.player !== stmt.player) return false
+        if (s.cellIndex != null && stmt.cellIndex != null) return s.cellIndex === stmt.cellIndex
+        if (s.column != null && stmt.column != null) return s.column === stmt.column
+        if (s.nimMove && stmt.nimMove) return s.nimMove.heap === stmt.nimMove.heap && s.nimMove.count === stmt.nimMove.count
+        return false
+      }
       return false
     })
   }

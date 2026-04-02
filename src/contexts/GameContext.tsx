@@ -2,18 +2,24 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { usePolkadotWallet } from '@/contexts/WalletContext'
 import { useNotifications } from '@/contexts/NotificationProvider'
 import { statementStore, type DerivedGame } from '@/lib/statementStore'
-import type { GameStatement, PlayerSymbol, GridSize } from '@/types/game'
+import type { GameStatement, PlayerSymbol, GameType, GridSize } from '@/types/game'
 import { generateGameId } from '@/types/game'
 
 export type { DerivedGame as Game } from '@/lib/statementStore'
+export type { DerivedTicTacToe, DerivedConnectFour, DerivedNim } from '@/lib/statementStore'
+
+export type MovePayload =
+  | { cellIndex: number }
+  | { column: number }
+  | { heap: number; count: number }
 
 interface GameContextType {
   games: DerivedGame[]
   activeGame: DerivedGame | null
   isLoading: boolean
-  createGame: (gridSize?: GridSize) => Promise<string | null>
-  joinGame: (gameId: string, hostAddress?: string) => Promise<boolean>
-  makeMove: (gameId: string, cellIndex: number) => Promise<boolean>
+  createGame: (gameType?: GameType, options?: { gridSize?: GridSize; nimConfig?: number[] }) => Promise<string | null>
+  joinGame: (gameId: string, hostAddress?: string, gameType?: GameType) => Promise<boolean>
+  makeMove: (gameId: string, move: MovePayload) => Promise<boolean>
   loadGame: (gameId: string) => void
   leaveGame: () => void
 }
@@ -28,7 +34,6 @@ export function useGame() {
   return context
 }
 
-/** Hook into statementStore changes via useSyncExternalStore for zero-lag React updates. */
 function useStatementStoreGames(): DerivedGame[] {
   return useSyncExternalStore(
     (cb) => statementStore.subscribe(cb),
@@ -45,7 +50,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const activeGame = activeGameId ? statementStore.getGame(activeGameId) : null
 
-  // Track previous move count to detect opponent moves for notifications
   const prevMoveCountRef = React.useRef<number>(0)
   useEffect(() => {
     if (!activeGame || !address) return
@@ -64,10 +68,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activeGame?.moveCount, activeGame?.status, activeGame?.result, address, addNotification, activeGame])
 
-  // RPC connection is lazy — only opened when a game is created, joined, or loaded.
-  // No always-on subscription from app startup.
-
-  const createGame = useCallback(async (gridSize: GridSize = 3): Promise<string | null> => {
+  const createGame = useCallback(async (
+    gameType: GameType = 'tic-tac-toe',
+    options?: { gridSize?: GridSize; nimConfig?: number[] }
+  ): Promise<string | null> => {
     if (!isConnected || !address) {
       addNotification('error', 'Connect your wallet to create a game')
       return null
@@ -75,7 +79,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     setIsLoading(true)
     try {
-      // Connect RPC lazily so we can receive the opponent's join
       statementStore.connectRpc(productAccountId)
 
       const gameId = generateGameId()
@@ -84,11 +87,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         gameId,
         playerX: address,
         playerXName: displayName || undefined,
-        gridSize: gridSize !== 3 ? gridSize : undefined,
+        gameType: gameType !== 'tic-tac-toe' ? gameType : undefined,
+        gridSize: options?.gridSize && options.gridSize !== 3 ? options.gridSize : undefined,
+        nimConfig: options?.nimConfig,
         timestamp: Date.now(),
       }
 
-      // Submit to network so the opponent receives playerXName via subscription
       statementStore.applyAndSubmit(stmt)
       setActiveGameId(gameId)
       prevMoveCountRef.current = 0
@@ -103,7 +107,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isConnected, address, productAccountId, displayName, addNotification])
 
-  const joinGame = useCallback(async (gameId: string, hostAddress?: string): Promise<boolean> => {
+  const joinGame = useCallback(async (gameId: string, hostAddress?: string, gameType?: GameType): Promise<boolean> => {
     if (!isConnected || !address) {
       addNotification('error', 'Connect your wallet to join a game')
       return false
@@ -114,30 +118,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       statementStore.connectRpc(productAccountId)
 
       const normalizedId = gameId.trim().toUpperCase()
-      const game = statementStore.getGame(normalizedId)
+      let game = statementStore.getGame(normalizedId)
 
-      if (game) {
-        if (game.status !== 'waiting') {
-          addNotification('error', 'This game is no longer available')
-          return false
-        }
-        if (game.playerX === address) {
-          addNotification('error', 'You cannot join your own game')
-          return false
-        }
-      } else if (!hostAddress) {
-        addNotification('error', 'Game not found. Make sure the game host is online.')
-        return false
-      }
-
-      // Determine the host's playerX address
-      const playerX = game?.playerX ?? hostAddress
-      if (!playerX) {
-        addNotification('error', 'Game not found. Make sure the game host is online.')
-        return false
-      }
-
-      // Bootstrap locally if game doesn't exist yet (cross-browser join)
+      // If game not found locally, bootstrap from URL params (gameType + host)
       if (!game && hostAddress) {
         if (hostAddress === address) {
           addNotification('error', 'You cannot join your own game')
@@ -147,22 +130,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           type: 'create_game',
           gameId: normalizedId,
           playerX: hostAddress,
+          gameType: gameType && gameType !== 'tic-tac-toe' ? gameType : undefined,
           timestamp: Date.now() - 1,
         })
+        game = statementStore.getGame(normalizedId)
       }
 
-      // Submit the create_game to the node (deferred from game creation).
-      // This ensures the statement only reaches the node when someone actually joins.
-      const createStmt: GameStatement = {
-        type: 'create_game',
-        gameId: normalizedId,
-        playerX,
-        playerXName: game?.playerXName || undefined,
-        timestamp: game?.createdAt ?? Date.now() - 1,
+      if (!game) {
+        addNotification('error', 'Game not found. Make sure the game host is online.')
+        return false
       }
-      statementStore.applyAndSubmit(createStmt)
 
-      // Now submit the join
+      if (game.status !== 'waiting') {
+        addNotification('error', 'This game is no longer available')
+        return false
+      }
+      if (game.playerX === address) {
+        addNotification('error', 'You cannot join your own game')
+        return false
+      }
+
       const joinStmt: GameStatement = {
         type: 'join_game',
         gameId: normalizedId,
@@ -184,13 +171,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isConnected, address, productAccountId, displayName, addNotification])
 
-  const makeMove = useCallback(async (gameId: string, cellIndex: number): Promise<boolean> => {
+  const makeMove = useCallback(async (gameId: string, move: MovePayload): Promise<boolean> => {
     if (!isConnected || !address) return false
 
     const game = statementStore.getGame(gameId)
     if (!game) return false
     if (game.status !== 'playing') return false
-    if (game.board[cellIndex] !== null) return false
 
     const isPlayerX = game.playerX === address
     const isPlayerO = game.playerO === address
@@ -203,7 +189,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       type: 'make_move',
       gameId,
       player: address,
-      cellIndex,
+      ...('cellIndex' in move ? { cellIndex: move.cellIndex } : {}),
+      ...('column' in move ? { column: move.column } : {}),
+      ...('heap' in move ? { nimMove: { heap: move.heap, count: move.count } } : {}),
       timestamp: Date.now(),
     }
 
@@ -226,7 +214,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const normalizedId = gameId.toUpperCase()
     setActiveGameId(normalizedId)
     prevMoveCountRef.current = statementStore.getGame(normalizedId)?.moveCount ?? 0
-    // Connect lazily — only when viewing a game
     statementStore.connectRpc(productAccountId)
   }, [productAccountId])
 

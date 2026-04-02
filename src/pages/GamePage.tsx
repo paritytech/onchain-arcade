@@ -7,6 +7,8 @@ import { Card, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { GameBoard } from '@/components/GameBoard'
+import { ConnectFourBoard } from '@/components/ConnectFourBoard'
+import { NimBoard } from '@/components/NimBoard'
 import { staggerContainer, staggerItem } from '@/lib/animation-variants'
 import { usePolkadotWallet } from '@/contexts/WalletContext'
 import { useGame } from '@/contexts/GameContext'
@@ -18,6 +20,7 @@ export function GamePage() {
   const navigate = useNavigate()
   const gameId = searchParams.get('game')
   const hostAddress = searchParams.get('host')
+  const gameTypeParam = searchParams.get('type') as import('@/types/game').GameType | null
   const { isConnected, address } = usePolkadotWallet()
   const { activeGame, loadGame, makeMove, createGame, joinGame, leaveGame, isLoading } = useGame()
   const { addNotification } = useNotifications()
@@ -37,7 +40,7 @@ export function GamePage() {
       const timer = setTimeout(async () => {
         if (!activeGame && hostAddress && isConnected) {
           setAutoJoinAttempted(true)
-          await joinGame(gameId, hostAddress)
+          await joinGame(gameId, hostAddress, gameTypeParam || undefined)
         } else if (!activeGame) {
           setGameNotFound(true)
         }
@@ -50,7 +53,7 @@ export function GamePage() {
   const handleJoinGame = async () => {
     if (!gameId) return
     const host = hostAddress || activeGame?.playerX || undefined
-    const success = await joinGame(gameId, host)
+    const success = await joinGame(gameId, host, gameTypeParam || activeGame?.gameType)
     if (success) {
       setGameNotFound(false)
     }
@@ -67,15 +70,24 @@ export function GamePage() {
 
   const handleCellClick = async (index: number) => {
     if (!activeGame || !isMyTurn) return
-    if (activeGame.board[index] !== null) return
-    await makeMove(activeGame.id, index)
+    await makeMove(activeGame.id, { cellIndex: index })
+  }
+
+  const handleColumnClick = async (col: number) => {
+    if (!activeGame || !isMyTurn) return
+    await makeMove(activeGame.id, { column: col })
+  }
+
+  const handleNimMove = async (heap: number, count: number) => {
+    if (!activeGame || !isMyTurn) return
+    await makeMove(activeGame.id, { heap, count })
   }
 
   const handleShareCode = async () => {
     if (!activeGame) return
     try {
       // Share the full URL with host param so the other browser can join
-      const shareUrl = `${window.location.origin}${window.location.pathname}#/play?game=${activeGame.id}&host=${activeGame.playerX}`
+      const shareUrl = `${window.location.origin}${window.location.pathname}#/play?game=${activeGame.id}&host=${activeGame.playerX}&type=${activeGame.gameType}`
       await navigator.clipboard.writeText(shareUrl)
       addNotification('success', 'Game link copied to clipboard!')
     } catch {
@@ -300,17 +312,35 @@ export function GamePage() {
         </Card>
       </motion.div>
 
-      {/* Game Board */}
+      {/* Game Board — conditional by game type */}
       <motion.div variants={staggerItem} className="flex justify-center">
-        <GameBoard
-          board={activeGame.board}
-          gridSize={activeGame.gridSize}
-          currentTurn={activeGame.currentTurn}
-          winningLine={activeGame.winningLine}
-          isMyTurn={isMyTurn}
-          isPlayable={activeGame.status === 'playing'}
-          onCellClick={handleCellClick}
-        />
+        {activeGame.gameType === 'connect-four' ? (
+          <ConnectFourBoard
+            board={activeGame.board}
+            currentTurn={activeGame.currentTurn}
+            winningLine={activeGame.winningLine}
+            isMyTurn={isMyTurn}
+            isPlayable={activeGame.status === 'playing'}
+            onColumnClick={handleColumnClick}
+          />
+        ) : activeGame.gameType === 'nim' ? (
+          <NimBoard
+            heaps={activeGame.heaps}
+            isMyTurn={isMyTurn}
+            isPlayable={activeGame.status === 'playing'}
+            onMove={handleNimMove}
+          />
+        ) : (
+          <GameBoard
+            board={activeGame.board}
+            gridSize={activeGame.gridSize}
+            currentTurn={activeGame.currentTurn}
+            winningLine={activeGame.winningLine}
+            isMyTurn={isMyTurn}
+            isPlayable={activeGame.status === 'playing'}
+            onCellClick={handleCellClick}
+          />
+        )}
       </motion.div>
 
       {/* Game Over Actions */}
