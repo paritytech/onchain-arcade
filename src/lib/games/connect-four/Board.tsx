@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/cn'
 import type { CellValue, PlayerSymbol } from '@/types/game'
-import { C4_ROWS, C4_COLS } from '@/lib/games/connect-four'
+import { C4_ROWS, C4_COLS } from './deriver'
 
 interface ConnectFourBoardProps {
   board: CellValue[]

@@ -2,58 +2,15 @@
 // Statements are submitted to the on-chain statement store for propagation and
 // received in real-time via subscription. localStorage serves as a local cache.
 
-import type {
-  GameStatement,
-  GameResult,
-  GameStatus,
-  PlayerSymbol,
-  GameType,
-  GridSize,
-  CellValue,
-} from '@/types/game'
+import type { GameStatement } from '@/types/game'
 import type { ProductAccountId } from '@novasamatech/product-sdk'
 import { statementStoreRpc } from './statementStoreRpc'
 import { statementStoreHost } from './statementStoreHost'
 import { isInTriangleHost } from './triangle/hostDetection'
 import { deriveGame } from './games'
 
-// --- DerivedGame discriminated union ---
-
-interface DerivedGameBase {
-  id: string
-  gameType: GameType
-  playerX: string
-  playerXName: string | null
-  playerO: string | null
-  playerOName: string | null
-  currentTurn: PlayerSymbol
-  status: GameStatus
-  result: GameResult
-  moveCount: number
-  createdAt: number
-  updatedAt: number
-}
-
-export interface DerivedTicTacToe extends DerivedGameBase {
-  gameType: 'tic-tac-toe'
-  gridSize: GridSize
-  board: CellValue[]
-  winningLine: number[] | null
-}
-
-export interface DerivedConnectFour extends DerivedGameBase {
-  gameType: 'connect-four'
-  board: CellValue[]
-  winningLine: number[] | null
-}
-
-export interface DerivedNim extends DerivedGameBase {
-  gameType: 'nim'
-  heaps: number[]
-  lastMove: { heap: number; count: number } | null
-}
-
-export type DerivedGame = DerivedTicTacToe | DerivedConnectFour | DerivedNim
+export type { DerivedGame, DerivedTicTacToe, DerivedConnectFour, DerivedNim } from '@/types/derived-game'
+import type { DerivedGame } from '@/types/derived-game'
 
 type Listener = () => void
 

@@ -5,8 +5,7 @@ import { statementStore, type DerivedGame } from '@/lib/statementStore'
 import type { GameStatement, PlayerSymbol, GameType, GridSize } from '@/types/game'
 import { generateGameId } from '@/types/game'
 
-export type { DerivedGame as Game } from '@/lib/statementStore'
-export type { DerivedTicTacToe, DerivedConnectFour, DerivedNim } from '@/lib/statementStore'
+export type { DerivedGame as Game, DerivedTicTacToe, DerivedConnectFour, DerivedNim } from '@/types/derived-game'
 
 export type MovePayload =
   | { cellIndex: number }

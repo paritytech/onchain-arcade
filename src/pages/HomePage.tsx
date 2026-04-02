@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Gamepad2, Copy, Check, Grid3X3, Layers, CircleDot } from 'lucide-react'
+import { Copy, Check, Grid3X3, Layers, CircleDot } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Card, CardContent } from '@/components/ui/Card'
-import { Input } from '@/components/ui/Input'
 import { staggerContainer, staggerItem } from '@/lib/animation-variants'
 import { usePolkadotWallet } from '@/contexts/WalletContext'
 import { useGame } from '@/contexts/GameContext'
@@ -27,9 +25,8 @@ const NIM_PRESETS: { label: string; heaps: number[] }[] = [
 export function HomePage() {
   const navigate = useNavigate()
   const { isConnected, address } = usePolkadotWallet()
-  const { createGame, joinGame, isLoading } = useGame()
+  const { createGame, isLoading } = useGame()
   const { addNotification } = useNotifications()
-  const [joinCode, setJoinCode] = useState('')
   const [createdCode, setCreatedCode] = useState<string | null>(null)
   const [createdGameType, setCreatedGameType] = useState<GameType>('tic-tac-toe')
   const [copied, setCopied] = useState(false)
@@ -54,15 +51,6 @@ export function HomePage() {
     if (gameId) {
       setCreatedCode(gameId)
       setCreatedGameType(gameType)
-    }
-  }
-
-  const handleJoin = async () => {
-    if (!joinCode.trim()) return
-    const code = joinCode.trim().toUpperCase()
-    const success = await joinGame(code)
-    if (success) {
-      navigate(`/play?game=${code}`)
     }
   }
 
@@ -128,157 +116,157 @@ export function HomePage() {
       )}
 
       {/* Game Cards */}
-      <motion.div variants={staggerItem} className="grid gap-4 md:grid-cols-3">
-        {/* Tic-Tac-Toe */}
-        <Card>
-          <CardContent className="p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-brand/10">
-                <Grid3X3 className="w-6 h-6 text-brand" aria-hidden="true" />
+      <motion.div variants={staggerItem} className="grid gap-5 md:grid-cols-3">
+
+        {/* --- Tic-Tac-Toe --- */}
+        <motion.div
+          whileHover={{ y: -6, transition: { duration: 0.25 } }}
+          className="group relative overflow-hidden rounded-2xl border border-pink-500/20 bg-gradient-to-b from-pink-950/40 to-grey-900/80"
+        >
+          {/* Decorative mini-grid */}
+          <div className="absolute top-4 right-4 grid grid-cols-3 gap-1 opacity-[0.07] group-hover:opacity-[0.15] transition-opacity" aria-hidden="true">
+            {['X','O','','','X','','O','','X'].map((c, i) => (
+              <div key={i} className="w-5 h-5 rounded text-[10px] font-bold flex items-center justify-center border border-pink-300">
+                {c}
               </div>
-              <div>
-                <h3 className="font-serif text-h4 text-text-primary">Tic-Tac-Toe</h3>
-                <p className="text-caption text-text-secondary">Get N in a row</p>
+            ))}
+          </div>
+
+          <div className="relative p-6 space-y-5">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-pink-500/15 flex items-center justify-center mb-3">
+                <Grid3X3 className="w-5 h-5 text-pink-400" aria-hidden="true" />
               </div>
+              <h3 className="text-lg font-bold text-text-primary tracking-tight">Tic-Tac-Toe</h3>
+              <p className="text-caption text-grey-400 mt-0.5">Classic grid strategy</p>
             </div>
+
             <div className="flex gap-1.5">
               {GRID_OPTIONS.map(opt => (
                 <button
                   key={opt.size}
                   onClick={() => setSelectedGrid(opt.size)}
-                  className={`flex-1 px-2 py-1.5 rounded-lg text-caption font-medium transition-colors ${
+                  className={`flex-1 py-2 rounded-lg text-caption font-semibold transition-all ${
                     selectedGrid === opt.size
-                      ? 'bg-brand text-white'
-                      : 'bg-grey-800/50 text-text-secondary hover:text-text-primary'
+                      ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/25'
+                      : 'bg-white/5 text-grey-400 hover:bg-white/10 hover:text-grey-200'
                   }`}
                 >
                   {opt.label}
                 </button>
               ))}
             </div>
-            {selectedGrid > 3 && (
-              <p className="text-caption text-text-secondary text-center">
-                {WIN_LENGTH[selectedGrid]} in a row to win
-              </p>
-            )}
-            <Button
-              variant="primary"
-              size="sm"
-              className="w-full"
-              onClick={() => handleCreate('tic-tac-toe')}
-              isLoading={isLoading}
-              disabled={notConnected}
-              leftIcon={<Gamepad2 className="w-4 h-4" />}
-            >
-              {notConnected ? 'Connect Wallet' : 'Create'}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Connect Four */}
-        <Card>
-          <CardContent className="p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-blue-500/10">
-                <Layers className="w-6 h-6 text-blue-400" aria-hidden="true" />
-              </div>
-              <div>
-                <h3 className="font-serif text-h4 text-text-primary">Connect Four</h3>
-                <p className="text-caption text-text-secondary">4 in a row, gravity drops</p>
-              </div>
-            </div>
-            <p className="text-caption text-text-secondary">
-              Drop discs into a 7x6 grid. First to connect 4 horizontally, vertically, or diagonally wins.
+            <p className="text-caption text-grey-500 text-center h-4">
+              {selectedGrid > 3 ? `${WIN_LENGTH[selectedGrid]} in a row to win` : ''}
             </p>
-            <Button
-              variant="primary"
-              size="sm"
-              className="w-full"
-              onClick={() => handleCreate('connect-four')}
-              isLoading={isLoading}
-              disabled={notConnected}
-              leftIcon={<Gamepad2 className="w-4 h-4" />}
-            >
-              {notConnected ? 'Connect Wallet' : 'Create'}
-            </Button>
-          </CardContent>
-        </Card>
 
-        {/* Nim */}
-        <Card>
-          <CardContent className="p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-amber-500/10">
-                <CircleDot className="w-6 h-6 text-amber-400" aria-hidden="true" />
+            <button
+              onClick={() => handleCreate('tic-tac-toe')}
+              disabled={notConnected || isLoading}
+              className="w-full py-2.5 rounded-xl font-semibold text-sm transition-all bg-pink-500/15 text-pink-300 hover:bg-pink-500/25 hover:text-pink-200 disabled:opacity-40 disabled:cursor-not-allowed border border-pink-500/20 hover:border-pink-500/40"
+            >
+              {notConnected ? 'Connect Wallet' : 'Create Game'}
+            </button>
+          </div>
+        </motion.div>
+
+        {/* --- Connect Four --- */}
+        <motion.div
+          whileHover={{ y: -6, transition: { duration: 0.25 } }}
+          className="group relative overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-b from-blue-950/40 to-grey-900/80"
+        >
+          {/* Decorative discs */}
+          <div className="absolute top-4 right-4 flex gap-1 opacity-[0.12] group-hover:opacity-[0.22] transition-opacity" aria-hidden="true">
+            {[0,1,2,3].map(i => (
+              <div key={i} className="flex flex-col gap-1">
+                {[0,1,2].map(j => (
+                  <div key={j} className={`w-4 h-4 rounded-full ${
+                    (i + j) % 3 === 0 ? 'bg-red-400' : (i + j) % 3 === 1 ? 'bg-yellow-400' : 'bg-blue-300/30'
+                  }`} />
+                ))}
               </div>
-              <div>
-                <h3 className="font-serif text-h4 text-text-primary">Nim</h3>
-                <p className="text-caption text-text-secondary">Don't take the last token</p>
+            ))}
+          </div>
+
+          <div className="relative p-6 space-y-5">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center mb-3">
+                <Layers className="w-5 h-5 text-blue-400" aria-hidden="true" />
               </div>
+              <h3 className="text-lg font-bold text-text-primary tracking-tight">Connect Four</h3>
+              <p className="text-caption text-grey-400 mt-0.5">Drop discs, get 4 in a row</p>
             </div>
+
+            <p className="text-caption text-grey-500 leading-relaxed">
+              7 x 6 grid with gravity. Connect 4 horizontally, vertically, or diagonally to win.
+            </p>
+
+            <button
+              onClick={() => handleCreate('connect-four')}
+              disabled={notConnected || isLoading}
+              className="w-full py-2.5 rounded-xl font-semibold text-sm transition-all bg-blue-500/15 text-blue-300 hover:bg-blue-500/25 hover:text-blue-200 disabled:opacity-40 disabled:cursor-not-allowed border border-blue-500/20 hover:border-blue-500/40"
+            >
+              {notConnected ? 'Connect Wallet' : 'Create Game'}
+            </button>
+          </div>
+        </motion.div>
+
+        {/* --- Nim --- */}
+        <motion.div
+          whileHover={{ y: -6, transition: { duration: 0.25 } }}
+          className="group relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-b from-amber-950/30 to-grey-900/80"
+        >
+          {/* Decorative tokens */}
+          <div className="absolute top-4 right-4 flex flex-col gap-1.5 opacity-[0.12] group-hover:opacity-[0.22] transition-opacity" aria-hidden="true">
+            {[3, 4, 5].map((n, row) => (
+              <div key={row} className="flex gap-1">
+                {Array.from({ length: n }, (_, i) => (
+                  <div key={i} className="w-3.5 h-3.5 rounded-full bg-amber-400" />
+                ))}
+              </div>
+            ))}
+          </div>
+
+          <div className="relative p-6 space-y-5">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center mb-3">
+                <CircleDot className="w-5 h-5 text-amber-400" aria-hidden="true" />
+              </div>
+              <h3 className="text-lg font-bold text-text-primary tracking-tight">Nim</h3>
+              <p className="text-caption text-grey-400 mt-0.5">Take tokens, avoid the last</p>
+            </div>
+
             <div className="flex gap-1.5">
               {NIM_PRESETS.map((preset, idx) => (
                 <button
                   key={preset.label}
                   onClick={() => setSelectedNimPreset(idx)}
-                  className={`flex-1 px-2 py-1.5 rounded-lg text-caption font-medium transition-colors ${
+                  className={`flex-1 py-2 rounded-lg text-caption font-semibold transition-all ${
                     selectedNimPreset === idx
-                      ? 'bg-amber-500 text-white'
-                      : 'bg-grey-800/50 text-text-secondary hover:text-text-primary'
+                      ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/25'
+                      : 'bg-white/5 text-grey-400 hover:bg-white/10 hover:text-grey-200'
                   }`}
                 >
                   {preset.label}
                 </button>
               ))}
             </div>
-            <p className="text-caption text-text-secondary text-center">
+            <p className="text-caption text-grey-500 text-center">
               Heaps: [{NIM_PRESETS[selectedNimPreset].heaps.join(', ')}]
             </p>
-            <Button
-              variant="primary"
-              size="sm"
-              className="w-full"
+
+            <button
               onClick={() => handleCreate('nim')}
-              isLoading={isLoading}
-              disabled={notConnected}
-              leftIcon={<Gamepad2 className="w-4 h-4" />}
+              disabled={notConnected || isLoading}
+              className="w-full py-2.5 rounded-xl font-semibold text-sm transition-all bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 disabled:opacity-40 disabled:cursor-not-allowed border border-amber-500/20 hover:border-amber-500/40"
             >
-              {notConnected ? 'Connect Wallet' : 'Create'}
-            </Button>
-          </CardContent>
-        </Card>
+              {notConnected ? 'Connect Wallet' : 'Create Game'}
+            </button>
+          </div>
+        </motion.div>
+
       </motion.div>
 
-      {/* Join Game */}
-      <motion.div variants={staggerItem}>
-        <Card>
-          <CardContent className="p-5">
-            <h3 className="font-serif text-h4 text-text-primary mb-2">Join a Game</h3>
-            <p className="text-caption text-text-secondary mb-3">
-              Enter the game code shared by your opponent.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Input
-                placeholder="Enter game code"
-                value={joinCode}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setJoinCode(e.target.value)}
-                inputSize="md"
-                className="font-mono tracking-widest"
-                aria-label="Game code"
-              />
-              <Button
-                variant="primary"
-                size="md"
-                onClick={handleJoin}
-                isLoading={isLoading}
-                disabled={notConnected || joinCode.trim().length < 4}
-              >
-                Join
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
     </motion.div>
   )
 }
