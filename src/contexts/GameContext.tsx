@@ -11,6 +11,8 @@ export type MovePayload =
   | { cellIndex: number }
   | { column: number }
   | { heap: number; count: number }
+  | { edge: string }
+  | { pit: number }
 
 interface GameContextType {
   games: DerivedGame[]
@@ -191,6 +193,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       ...('cellIndex' in move ? { cellIndex: move.cellIndex } : {}),
       ...('column' in move ? { column: move.column } : {}),
       ...('heap' in move ? { nimMove: { heap: move.heap, count: move.count } } : {}),
+      ...('edge' in move ? { edge: move.edge } : {}),
+      ...('pit' in move ? { pit: move.pit } : {}),
       timestamp: Date.now(),
     }
 

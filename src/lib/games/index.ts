@@ -3,13 +3,19 @@ import type { DerivedGame } from '@/types/derived-game'
 import { deriveTicTacToe } from './tic-tac-toe'
 import { deriveConnectFour } from './connect-four'
 import { deriveNim } from './nim-game'
+import { deriveDotsAndBoxes } from './dots-and-boxes'
+import { deriveMancala } from './mancala'
+import { deriveReversi } from './reversi'
 
 type DeriverFn = (gameId: string, stmts: GameStatement[]) => DerivedGame | null
 
-const derivers: Record<GameType, DeriverFn> = {
+const derivers: Partial<Record<GameType, DeriverFn>> = {
   'tic-tac-toe': deriveTicTacToe,
   'connect-four': deriveConnectFour,
   'nim': deriveNim,
+  'dots-and-boxes': deriveDotsAndBoxes,
+  'mancala': deriveMancala,
+  'reversi': deriveReversi,
 }
 
 export function deriveGame(gameId: string, stmts: GameStatement[]): DerivedGame | null {

@@ -215,6 +215,8 @@ class StatementStore {
         if (s.cellIndex != null && stmt.cellIndex != null) return s.cellIndex === stmt.cellIndex
         if (s.column != null && stmt.column != null) return s.column === stmt.column
         if (s.nimMove && stmt.nimMove) return s.nimMove.heap === stmt.nimMove.heap && s.nimMove.count === stmt.nimMove.count
+        if (s.edge != null && stmt.edge != null) return s.edge === stmt.edge
+        if (s.pit != null && stmt.pit != null) return s.pit === stmt.pit
         return false
       }
       return false

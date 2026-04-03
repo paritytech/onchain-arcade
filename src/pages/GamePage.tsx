@@ -9,6 +9,9 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { GameBoard } from '@/lib/games/tic-tac-toe'
 import { ConnectFourBoard } from '@/lib/games/connect-four'
 import { NimBoard } from '@/lib/games/nim-game'
+import { DotsAndBoxesBoard } from '@/lib/games/dots-and-boxes'
+import { MancalaBoard } from '@/lib/games/mancala'
+import { ReversiBoard } from '@/lib/games/reversi'
 import { staggerContainer, staggerItem } from '@/lib/animation-variants'
 import { usePolkadotWallet } from '@/contexts/WalletContext'
 import { useGame } from '@/contexts/GameContext'
@@ -81,6 +84,16 @@ export function GamePage() {
   const handleNimMove = async (heap: number, count: number) => {
     if (!activeGame || !isMyTurn) return
     await makeMove(activeGame.id, { heap, count })
+  }
+
+  const handleEdgeClick = async (edge: string) => {
+    if (!activeGame || !isMyTurn) return
+    await makeMove(activeGame.id, { edge })
+  }
+
+  const handlePitClick = async (pit: number) => {
+    if (!activeGame || !isMyTurn) return
+    await makeMove(activeGame.id, { pit })
   }
 
   const handleShareCode = async () => {
@@ -322,6 +335,34 @@ export function GamePage() {
             isMyTurn={isMyTurn}
             isPlayable={activeGame.status === 'playing'}
             onColumnClick={handleColumnClick}
+          />
+        ) : activeGame.gameType === 'dots-and-boxes' ? (
+          <DotsAndBoxesBoard
+            lines={activeGame.lines}
+            boxes={activeGame.boxes}
+            scores={activeGame.scores}
+            isMyTurn={isMyTurn}
+            isPlayable={activeGame.status === 'playing'}
+            onEdgeClick={handleEdgeClick}
+          />
+        ) : activeGame.gameType === 'mancala' ? (
+          <MancalaBoard
+            pits={activeGame.pits}
+            lastSowEnd={activeGame.lastSowEnd}
+            isMyTurn={isMyTurn}
+            isPlayable={activeGame.status === 'playing'}
+            isPlayerX={playerRole === 'X'}
+            onPitClick={handlePitClick}
+          />
+        ) : activeGame.gameType === 'reversi' ? (
+          <ReversiBoard
+            board={activeGame.board}
+            validMoves={activeGame.validMoves}
+            scores={activeGame.scores}
+            currentTurn={activeGame.currentTurn}
+            isMyTurn={isMyTurn}
+            isPlayable={activeGame.status === 'playing'}
+            onCellClick={handleCellClick}
           />
         ) : activeGame.gameType === 'nim' ? (
           <NimBoard

@@ -34,4 +34,25 @@ export interface DerivedNim extends DerivedGameBase {
   lastMove: { heap: number; count: number } | null
 }
 
-export type DerivedGame = DerivedTicTacToe | DerivedConnectFour | DerivedNim
+export interface DerivedDotsAndBoxes extends DerivedGameBase {
+  gameType: 'dots-and-boxes'
+  lines: string[]
+  boxes: (PlayerSymbol | null)[]
+  scores: { X: number; O: number }
+}
+
+export interface DerivedMancala extends DerivedGameBase {
+  gameType: 'mancala'
+  pits: number[]
+  lastSowEnd: number | null
+}
+
+export interface DerivedReversi extends DerivedGameBase {
+  gameType: 'reversi'
+  board: CellValue[]
+  validMoves: number[]
+  skippedLastTurn: boolean
+  scores: { X: number; O: number }
+}
+
+export type DerivedGame = DerivedTicTacToe | DerivedConnectFour | DerivedNim | DerivedDotsAndBoxes | DerivedMancala | DerivedReversi

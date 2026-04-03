@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Copy, Check, Grid3X3, Layers, CircleDot } from 'lucide-react'
+import { Copy, Check, Grid3X3, Layers, CircleDot, Box, Gem, Disc } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { staggerContainer, staggerItem } from '@/lib/animation-variants'
 import { usePolkadotWallet } from '@/contexts/WalletContext'
@@ -46,6 +46,11 @@ export function HomePage() {
         break
       case 'nim':
         gameId = await createGame('nim', { nimConfig: NIM_PRESETS[selectedNimPreset].heaps })
+        break
+      case 'dots-and-boxes':
+      case 'mancala':
+      case 'reversi':
+        gameId = await createGame(gameType)
         break
     }
     if (gameId) {
@@ -116,7 +121,7 @@ export function HomePage() {
       )}
 
       {/* Game Cards */}
-      <motion.div variants={staggerItem} className="grid gap-5 md:grid-cols-3">
+      <motion.div variants={staggerItem} className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
 
         {/* --- Tic-Tac-Toe --- */}
         <motion.div
@@ -259,6 +264,103 @@ export function HomePage() {
               onClick={() => handleCreate('nim')}
               disabled={notConnected || isLoading}
               className="w-full py-2.5 rounded-xl font-semibold text-sm transition-all bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 disabled:opacity-40 disabled:cursor-not-allowed border border-amber-500/20 hover:border-amber-500/40"
+            >
+              {notConnected ? 'Connect Wallet' : 'Create Game'}
+            </button>
+          </div>
+        </motion.div>
+
+        {/* --- Dots and Boxes --- */}
+        <motion.div
+          whileHover={{ y: -6, transition: { duration: 0.25 } }}
+          className="group relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-b from-emerald-950/40 to-grey-900/80"
+        >
+          <div className="absolute top-4 right-4 grid grid-cols-3 gap-0.5 opacity-[0.08] group-hover:opacity-[0.18] transition-opacity" aria-hidden="true">
+            {Array.from({ length: 16 }, (_, i) => (
+              <div key={i} className="w-2 h-2 rounded-full bg-emerald-400" />
+            ))}
+          </div>
+          <div className="relative p-6 space-y-5">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center mb-3">
+                <Box className="w-5 h-5 text-emerald-400" aria-hidden="true" />
+              </div>
+              <h3 className="text-lg font-bold text-text-primary tracking-tight">Dots & Boxes</h3>
+              <p className="text-caption text-grey-400 mt-0.5">Draw lines, claim boxes</p>
+            </div>
+            <p className="text-caption text-grey-500 leading-relaxed">
+              Connect dots with lines. Complete a box to claim it and earn an extra turn. Most boxes wins.
+            </p>
+            <button
+              onClick={() => handleCreate('dots-and-boxes')}
+              disabled={notConnected || isLoading}
+              className="w-full py-2.5 rounded-xl font-semibold text-sm transition-all bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 hover:text-emerald-200 disabled:opacity-40 disabled:cursor-not-allowed border border-emerald-500/20 hover:border-emerald-500/40"
+            >
+              {notConnected ? 'Connect Wallet' : 'Create Game'}
+            </button>
+          </div>
+        </motion.div>
+
+        {/* --- Mancala --- */}
+        <motion.div
+          whileHover={{ y: -6, transition: { duration: 0.25 } }}
+          className="group relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-b from-violet-950/40 to-grey-900/80"
+        >
+          <div className="absolute top-4 right-4 flex gap-2 opacity-[0.08] group-hover:opacity-[0.18] transition-opacity" aria-hidden="true">
+            {[3, 4, 3].map((n, row) => (
+              <div key={row} className="flex flex-col gap-1">
+                {Array.from({ length: n }, (_, i) => (
+                  <div key={i} className="w-3 h-3 rounded-full bg-violet-400" />
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="relative p-6 space-y-5">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-violet-500/15 flex items-center justify-center mb-3">
+                <Gem className="w-5 h-5 text-violet-400" aria-hidden="true" />
+              </div>
+              <h3 className="text-lg font-bold text-text-primary tracking-tight">Mancala</h3>
+              <p className="text-caption text-grey-400 mt-0.5">Sow stones, capture to win</p>
+            </div>
+            <p className="text-caption text-grey-500 leading-relaxed">
+              Pick up stones, sow them counterclockwise. Land in your store for an extra turn. Most stones wins.
+            </p>
+            <button
+              onClick={() => handleCreate('mancala')}
+              disabled={notConnected || isLoading}
+              className="w-full py-2.5 rounded-xl font-semibold text-sm transition-all bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 hover:text-violet-200 disabled:opacity-40 disabled:cursor-not-allowed border border-violet-500/20 hover:border-violet-500/40"
+            >
+              {notConnected ? 'Connect Wallet' : 'Create Game'}
+            </button>
+          </div>
+        </motion.div>
+
+        {/* --- Reversi --- */}
+        <motion.div
+          whileHover={{ y: -6, transition: { duration: 0.25 } }}
+          className="group relative overflow-hidden rounded-2xl border border-teal-500/20 bg-gradient-to-b from-teal-950/40 to-grey-900/80"
+        >
+          <div className="absolute top-4 right-4 grid grid-cols-3 gap-1 opacity-[0.08] group-hover:opacity-[0.18] transition-opacity" aria-hidden="true">
+            {[1,0,1,0,1,0,1,0,1].map((v, i) => (
+              <div key={i} className={`w-4 h-4 rounded-full ${v ? 'bg-grey-300' : 'bg-grey-700'}`} />
+            ))}
+          </div>
+          <div className="relative p-6 space-y-5">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-teal-500/15 flex items-center justify-center mb-3">
+                <Disc className="w-5 h-5 text-teal-400" aria-hidden="true" />
+              </div>
+              <h3 className="text-lg font-bold text-text-primary tracking-tight">Reversi</h3>
+              <p className="text-caption text-grey-400 mt-0.5">Flip discs, control the board</p>
+            </div>
+            <p className="text-caption text-grey-500 leading-relaxed">
+              Place discs to flip opponent pieces. Most discs when no moves remain wins. Classic Othello rules.
+            </p>
+            <button
+              onClick={() => handleCreate('reversi')}
+              disabled={notConnected || isLoading}
+              className="w-full py-2.5 rounded-xl font-semibold text-sm transition-all bg-teal-500/15 text-teal-300 hover:bg-teal-500/25 hover:text-teal-200 disabled:opacity-40 disabled:cursor-not-allowed border border-teal-500/20 hover:border-teal-500/40"
             >
               {notConnected ? 'Connect Wallet' : 'Create Game'}
             </button>
