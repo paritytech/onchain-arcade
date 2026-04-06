@@ -134,4 +134,16 @@ export const GAME_RULES: Record<GameType, GameRules> = {
       'If the board fills, the player with more flat stones on top wins.',
     ],
   },
+  'emoji-pictionary': {
+    title: 'Emoji Pictionary',
+    description: 'Describe words using only emoji — others guess!',
+    rules: [
+      '3-8 players take turns being the describer.',
+      'The describer gets a secret word and must describe it using only emoji.',
+      'Other players type their guesses. First correct guess scores the most!',
+      'First correct guess = 3 pts, second = 2 pts, third = 1 pt. Describer gets 1 pt if guessed.',
+      'After each player has described once, the game ends. Most points wins!',
+      'The describer can skip their turn if the word is too hard.',
+    ],
+  },
 }

@@ -16,6 +16,7 @@ import { HackenbushBoard, getBestHackenbushMove } from '@/lib/games/hackenbush'
 import { EntropyBoard, getBestEntropyMove } from '@/lib/games/entropy'
 import { BlokusDuoBoard, getBestBlokusMove } from '@/lib/games/blokus-duo'
 import { TakBoard, getBestTakMove } from '@/lib/games/tak'
+import { EmojiPictionaryBoard } from '@/lib/games/emoji-pictionary'
 import { staggerContainer, staggerItem } from '@/lib/animation-variants'
 import { usePolkadotWallet } from '@/contexts/WalletContext'
 import { useGame } from '@/contexts/GameContext'
@@ -281,7 +282,12 @@ export function GamePage() {
   }
 
   const statusText = (() => {
-    if (activeGame.status === 'waiting') return 'Waiting for opponent...'
+    if (activeGame.status === 'waiting') {
+      if (activeGame.gameType === 'emoji-pictionary') {
+        return `Waiting for players (${activeGame.players.length}/${activeGame.maxPlayers})...`
+      }
+      return 'Waiting for opponent...'
+    }
     if (activeGame.status === 'finished') {
       if (activeGame.result === 'draw') return "It's a draw!"
       if (activeGame.result === 'x_wins') {
@@ -506,6 +512,22 @@ export function GamePage() {
             firstMoveDone={activeGame.firstMoveDone}
             onPlace={(pos, type) => makeMove(activeGame.id, { takPlace: { position: pos, pieceType: type } })}
             onMove={(from, dir, drops) => makeMove(activeGame.id, { takMove: { from, direction: dir, drops } })}
+          />
+        ) : activeGame.gameType === 'emoji-pictionary' ? (
+          <EmojiPictionaryBoard
+            players={activeGame.players}
+            currentDescriber={activeGame.currentDescriber}
+            currentWord={activeGame.currentWord}
+            clues={activeGame.clues}
+            guesses={activeGame.guesses}
+            roundNumber={activeGame.roundNumber}
+            totalRounds={activeGame.totalRounds}
+            wordGuessed={activeGame.wordGuessed}
+            myPlayerIndex={activeGame.players.findIndex(p => p.address === address)}
+            isPlayable={activeGame.status === 'playing'}
+            onSendClue={(clue) => makeMove(activeGame.id, { emojiClue: clue })}
+            onGuess={(g) => makeMove(activeGame.id, { guess: g })}
+            onSkip={() => makeMove(activeGame.id, { skipRound: true })}
           />
         ) : (
           <GameBoard

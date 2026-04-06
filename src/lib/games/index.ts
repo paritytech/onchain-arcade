@@ -11,6 +11,7 @@ import { deriveGhost } from './ghost'
 import { deriveHackenbush } from './hackenbush'
 import { deriveBlokusDuo } from './blokus-duo'
 import { deriveTak } from './tak'
+import { deriveEmojiPictionary } from './emoji-pictionary'
 
 type DeriverFn = (gameId: string, stmts: GameStatement[]) => DerivedGame | null
 
@@ -26,6 +27,7 @@ const derivers: Partial<Record<GameType, DeriverFn>> = {
   'hackenbush': deriveHackenbush,
   'blokus-duo': deriveBlokusDuo,
   'tak': deriveTak,
+  'emoji-pictionary': deriveEmojiPictionary,
 }
 
 export function deriveGame(gameId: string, stmts: GameStatement[]): DerivedGame | null {

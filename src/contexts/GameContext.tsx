@@ -23,12 +23,15 @@ export type MovePayload =
   | { blokusPass: true }
   | { takPlace: { position: number; pieceType: 'flat' | 'wall' | 'capstone' } }
   | { takMove: { from: number; direction: 'N' | 'S' | 'E' | 'W'; drops: number[] } }
+  | { emojiClue: string }
+  | { guess: string }
+  | { skipRound: true }
 
 interface GameContextType {
   games: DerivedGame[]
   activeGame: DerivedGame | null
   isLoading: boolean
-  createGame: (gameType?: GameType, options?: { gridSize?: GridSize; nimConfig?: number[]; vsComputer?: boolean }) => Promise<string | null>
+  createGame: (gameType?: GameType, options?: { gridSize?: GridSize; nimConfig?: number[]; vsComputer?: boolean; maxPlayers?: number }) => Promise<string | null>
   joinGame: (gameId: string, hostAddress?: string, gameType?: GameType) => Promise<boolean>
   makeMove: (gameId: string, move: MovePayload) => Promise<boolean>
   loadGame: (gameId: string) => void
@@ -81,7 +84,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const createGame = useCallback(async (
     gameType: GameType = 'tic-tac-toe',
-    options?: { gridSize?: GridSize; nimConfig?: number[]; vsComputer?: boolean }
+    options?: { gridSize?: GridSize; nimConfig?: number[]; vsComputer?: boolean; maxPlayers?: number }
   ): Promise<string | null> => {
     if (!isConnected || !address) {
       addNotification('error', 'Connect your wallet to create a game')
@@ -102,6 +105,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         gridSize: options?.gridSize && options.gridSize !== 3 ? options.gridSize : undefined,
         nimConfig: options?.nimConfig,
         vsComputer: options?.vsComputer || undefined,
+        maxPlayers: options?.maxPlayers,
         timestamp: Date.now(),
       }
 
@@ -228,6 +232,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       ...('blokusPass' in move ? { blokusPass: true } : {}),
       ...('takPlace' in move ? { takPlace: move.takPlace } : {}),
       ...('takMove' in move ? { takMove: move.takMove } : {}),
+      ...('emojiClue' in move ? { emojiClue: move.emojiClue } : {}),
+      ...('guess' in move ? { guess: move.guess } : {}),
+      ...('skipRound' in move ? { skipRound: true } : {}),
       timestamp: Date.now(),
     }
 

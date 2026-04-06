@@ -227,6 +227,9 @@ class StatementStore {
         if (s.blokusPass && stmt.blokusPass) return true
         if (s.takPlace && stmt.takPlace) return s.takPlace.position === stmt.takPlace.position
         if (s.takMove && stmt.takMove) return s.takMove.from === stmt.takMove.from && s.takMove.direction === stmt.takMove.direction
+        if (s.emojiClue && stmt.emojiClue) return s.emojiClue === stmt.emojiClue
+        if (s.guess && stmt.guess) return s.guess === stmt.guess
+        if (s.skipRound && stmt.skipRound) return true
         return false
       }
       return false

@@ -125,4 +125,29 @@ export interface DerivedTak extends DerivedGameBase {
   firstMoveDone: { X: boolean; O: boolean }
 }
 
-export type DerivedGame = DerivedTicTacToe | DerivedConnectFour | DerivedNim | DerivedDotsAndBoxes | DerivedMancala | DerivedReversi | DerivedGhost | DerivedEntropy | DerivedHackenbush | DerivedBlokusDuo | DerivedTak
+export interface EmojiPlayer {
+  address: string
+  name: string | null
+  score: number
+}
+
+export interface EmojiGuess {
+  playerIndex: number
+  text: string
+  correct: boolean
+}
+
+export interface DerivedEmojiPictionary extends DerivedGameBase {
+  gameType: 'emoji-pictionary'
+  players: EmojiPlayer[]
+  maxPlayers: number
+  currentDescriber: number
+  currentWord: string
+  clues: string[]
+  guesses: EmojiGuess[]
+  roundNumber: number
+  totalRounds: number
+  wordGuessed: boolean
+}
+
+export type DerivedGame = DerivedTicTacToe | DerivedConnectFour | DerivedNim | DerivedDotsAndBoxes | DerivedMancala | DerivedReversi | DerivedGhost | DerivedEntropy | DerivedHackenbush | DerivedBlokusDuo | DerivedTak | DerivedEmojiPictionary

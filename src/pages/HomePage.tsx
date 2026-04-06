@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Copy, Check, Grid3X3, Layers, CircleDot, Box, Gem, Disc, Info, Type, Scissors, Shuffle, Puzzle, Castle } from 'lucide-react'
+import { Copy, Check, Grid3X3, Layers, CircleDot, Box, Gem, Disc, Info, Type, Scissors, Shuffle, Puzzle, Castle, Smile } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { staggerContainer, staggerItem } from '@/lib/animation-variants'
@@ -35,6 +35,7 @@ export function HomePage() {
   const [selectedGrid, setSelectedGrid] = useState<GridSize>(3)
   const [selectedNimPreset, setSelectedNimPreset] = useState(1)
   const [rulesGame, setRulesGame] = useState<GameType | null>(null)
+  const [emojiPlayers, setEmojiPlayers] = useState(3)
 
   const notConnected = !isConnected
 
@@ -59,6 +60,9 @@ export function HomePage() {
       case 'blokus-duo':
       case 'tak':
         gameId = await createGame(gameType, { vsComputer })
+        break
+      case 'emoji-pictionary':
+        gameId = await createGame('emoji-pictionary', { maxPlayers: emojiPlayers })
         break
     }
     if (gameId) {
@@ -427,6 +431,45 @@ export function HomePage() {
               Place and stack flat stones, walls, and capstones on a 5x5 board. Build a road to connect opposite edges.
             </p>
             <GameButtons game="tak" />
+          </div>
+        </motion.div>
+
+        {/* --- Emoji Pictionary --- */}
+        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-yellow-500/20 bg-gradient-to-b from-yellow-950/40 to-grey-900/80">
+          <div className="relative p-6 space-y-5">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-yellow-500/15 flex items-center justify-center mb-3">
+                <Smile className="w-5 h-5 text-yellow-400" aria-hidden="true" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-lg font-bold text-text-primary tracking-tight">Emoji Pictionary</h3>
+                <InfoBtn game="emoji-pictionary" />
+              </div>
+              <p className="text-caption text-grey-400 mt-0.5">3-8 players — describe with emoji!</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-caption text-grey-500">Players:</span>
+              {[3, 4, 5, 6].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setEmojiPlayers(n)}
+                  className={`w-8 h-8 rounded-lg text-caption font-semibold transition-all ${
+                    emojiPlayers === n
+                      ? 'bg-yellow-500 text-white shadow-lg shadow-yellow-500/25'
+                      : 'bg-white/5 text-grey-400 hover:bg-white/10'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => handleCreate('emoji-pictionary')}
+              disabled={notConnected || isLoading}
+              className="w-full py-2.5 rounded-xl font-semibold text-sm transition-all bg-white/5 text-grey-300 hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 hover:border-white/20"
+            >
+              {notConnected ? 'Connect Wallet' : 'Create Lobby'}
+            </button>
           </div>
         </motion.div>
 
