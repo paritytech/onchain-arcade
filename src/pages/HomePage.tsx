@@ -97,20 +97,19 @@ export function HomePage() {
     </button>
   )
 
-  // Dual-button helper: Multiplayer | vs Computer
-  const GameButtons = ({ game, color }: { game: GameType; color: string }) => (
+  const GameButtons = ({ game }: { game: GameType }) => (
     <div className="flex gap-2">
       <button
         onClick={() => handleCreate(game)}
         disabled={notConnected || isLoading}
-        className={`flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all bg-${color}-500/15 text-${color}-300 hover:bg-${color}-500/25 hover:text-${color}-200 disabled:opacity-40 disabled:cursor-not-allowed border border-${color}-500/20 hover:border-${color}-500/40`}
+        className="flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all bg-white/5 text-grey-300 hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 hover:border-white/20"
       >
         {notConnected ? 'Connect Wallet' : 'Multiplayer'}
       </button>
       <button
         onClick={() => handleCreate(game, true)}
         disabled={notConnected || isLoading}
-        className={`flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all bg-${color}-500/25 text-${color}-200 hover:bg-${color}-500/35 disabled:opacity-40 disabled:cursor-not-allowed border border-${color}-400/30 hover:border-${color}-400/50`}
+        className="flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all bg-white/10 text-grey-200 hover:bg-white/15 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed border border-white/15 hover:border-white/25"
       >
         vs Computer
       </button>
@@ -191,7 +190,7 @@ export function HomePage() {
             <p className="text-caption text-grey-500 text-center h-4">
               {selectedGrid > 3 ? `${WIN_LENGTH[selectedGrid]} in a row to win` : ''}
             </p>
-            <GameButtons game="tic-tac-toe" color="pink" />
+            <GameButtons game="tic-tac-toe" />
           </div>
         </motion.div>
 
@@ -220,7 +219,7 @@ export function HomePage() {
             <p className="text-caption text-grey-500 leading-relaxed">
               7 x 6 grid with gravity. Connect 4 horizontally, vertically, or diagonally to win.
             </p>
-            <GameButtons game="connect-four" color="blue" />
+            <GameButtons game="connect-four" />
           </div>
         </motion.div>
 
@@ -252,7 +251,7 @@ export function HomePage() {
               ))}
             </div>
             <p className="text-caption text-grey-500 text-center">Heaps: [{NIM_PRESETS[selectedNimPreset].heaps.join(', ')}]</p>
-            <GameButtons game="nim" color="amber" />
+            <GameButtons game="nim" />
           </div>
         </motion.div>
 
@@ -275,7 +274,7 @@ export function HomePage() {
             <p className="text-caption text-grey-500 leading-relaxed">
               Connect dots with lines. Complete a box to claim it and earn an extra turn. Most boxes wins.
             </p>
-            <GameButtons game="dots-and-boxes" color="emerald" />
+            <GameButtons game="dots-and-boxes" />
           </div>
         </motion.div>
 
@@ -302,7 +301,7 @@ export function HomePage() {
             <p className="text-caption text-grey-500 leading-relaxed">
               Pick up stones, sow them counterclockwise. Land in your store for an extra turn. Most stones wins.
             </p>
-            <GameButtons game="mancala" color="violet" />
+            <GameButtons game="mancala" />
           </div>
         </motion.div>
 
@@ -327,7 +326,7 @@ export function HomePage() {
             <p className="text-caption text-grey-500 leading-relaxed">
               Place discs to flip opponent pieces. Most discs when no moves remain wins. Classic Othello rules.
             </p>
-            <GameButtons game="reversi" color="teal" />
+            <GameButtons game="reversi" />
           </div>
         </motion.div>
 
@@ -347,7 +346,7 @@ export function HomePage() {
             <p className="text-caption text-grey-500 leading-relaxed">
               Add letters to a growing word. Complete a 4+ letter word and you lose. Accumulate G-H-O-S-T and you're out.
             </p>
-            <GameButtons game="ghost" color="rose" />
+            <GameButtons game="ghost" />
           </div>
         </motion.div>
 
@@ -367,7 +366,7 @@ export function HomePage() {
             <p className="text-caption text-grey-500 leading-relaxed">
               Remove colored edges from a graph. Disconnected parts fall. Last player to move wins.
             </p>
-            <GameButtons game="hackenbush" color="red" />
+            <GameButtons game="hackenbush" />
           </div>
         </motion.div>
 
@@ -387,7 +386,7 @@ export function HomePage() {
             <p className="text-caption text-grey-500 leading-relaxed">
               Chaos places colored pieces randomly. Order slides them into scoring rows. Roles swap after round 1.
             </p>
-            <GameButtons game="entropy" color="sky" />
+            <GameButtons game="entropy" />
           </div>
         </motion.div>
 
@@ -407,7 +406,7 @@ export function HomePage() {
             <p className="text-caption text-grey-500 leading-relaxed">
               Place tetromino-style shapes on a 14x14 board. Touch corners only, never edges. Most squares wins.
             </p>
-            <GameButtons game="blokus-duo" color="fuchsia" />
+            <GameButtons game="blokus-duo" />
           </div>
         </motion.div>
 
@@ -427,7 +426,7 @@ export function HomePage() {
             <p className="text-caption text-grey-500 leading-relaxed">
               Place and stack flat stones, walls, and capstones on a 5x5 board. Build a road to connect opposite edges.
             </p>
-            <GameButtons game="tak" color="orange" />
+            <GameButtons game="tak" />
           </div>
         </motion.div>
 

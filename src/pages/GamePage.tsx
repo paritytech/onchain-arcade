@@ -3,7 +3,6 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Copy, Share2, RotateCcw, Gamepad2, UserPlus, Info } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Card, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { GameBoard, getBestMove } from '@/lib/games/tic-tac-toe'
@@ -199,7 +198,9 @@ export function GamePage() {
   }
 
   const handleNewGame = async () => {
-    const id = await createGame()
+    const gameType = activeGame?.gameType || 'tic-tac-toe'
+    const vsComp = activeGame?.vsComputer || false
+    const id = await createGame(gameType, { vsComputer: vsComp })
     if (id) {
       navigate(`/play?game=${id}`)
     }
@@ -383,30 +384,20 @@ export function GamePage() {
         </motion.div>
       )}
 
-      {/* Players */}
-      <motion.div variants={staggerItem} className="grid grid-cols-2 gap-4">
-        <Card className={activeGame.currentTurn === 'X' && activeGame.status === 'playing' ? 'ring-2 ring-brand' : ''}>
-          <CardContent className="p-4 text-center">
-            <p className="text-h2 font-bold text-brand mb-1">X</p>
-            <p className="text-caption text-text-secondary truncate">
-              {activeGame.playerX === address
-                ? 'You'
-                : activeGame.playerXName || truncateAddress(activeGame.playerX)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className={activeGame.currentTurn === 'O' && activeGame.status === 'playing' ? 'ring-2 ring-brand' : ''}>
-          <CardContent className="p-4 text-center">
-            <p className="text-h2 font-bold text-brand mb-1">O</p>
-            <p className="text-caption text-text-secondary truncate">
-              {activeGame.playerO
-                ? activeGame.playerO === address
-                  ? 'You'
-                  : activeGame.playerOName || truncateAddress(activeGame.playerO)
-                : 'Waiting...'}
-            </p>
-          </CardContent>
-        </Card>
+      {/* Players — compact inline */}
+      <motion.div variants={staggerItem} className="flex justify-center gap-4">
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors ${activeGame.currentTurn === 'X' && activeGame.status === 'playing' ? 'border-brand bg-brand/10' : 'border-grey-700 bg-grey-800/30'}`}>
+          <span className="text-sm font-bold text-brand">X</span>
+          <span className="text-caption text-text-secondary truncate max-w-[120px]">
+            {activeGame.playerX === address ? 'You' : activeGame.playerXName || truncateAddress(activeGame.playerX)}
+          </span>
+        </div>
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors ${activeGame.currentTurn === 'O' && activeGame.status === 'playing' ? 'border-brand bg-brand/10' : 'border-grey-700 bg-grey-800/30'}`}>
+          <span className="text-sm font-bold text-brand">O</span>
+          <span className="text-caption text-text-secondary truncate max-w-[120px]">
+            {activeGame.playerO ? (activeGame.playerO === address ? 'You' : activeGame.playerOName || truncateAddress(activeGame.playerO)) : 'Waiting...'}
+          </span>
+        </div>
       </motion.div>
 
       {/* Game Board — conditional by game type */}
