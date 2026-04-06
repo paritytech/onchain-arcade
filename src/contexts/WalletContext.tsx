@@ -424,7 +424,6 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
 
   const accountName = selectedAccount?.name || null;
   const displayName = accountAlias || accountName || truncatedAddress;
-
   return (
     <PolkadotWalletContext.Provider
       value={{

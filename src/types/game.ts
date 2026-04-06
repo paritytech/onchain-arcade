@@ -85,6 +85,7 @@ export interface CreateGameStatement {
   gameType?: GameType
   gridSize?: GridSize
   nimConfig?: number[]
+  vsComputer?: boolean
   timestamp: number
 }
 

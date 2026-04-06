@@ -131,6 +131,7 @@ export function deriveReversi(gameId: string, stmts: GameStatement[]): DerivedRe
     status,
     result,
     moveCount,
+    vsComputer: create.vsComputer ?? false,
     createdAt: create.timestamp,
     updatedAt,
   }

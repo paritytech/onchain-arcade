@@ -53,6 +53,7 @@ export function deriveTicTacToe(gameId: string, stmts: GameStatement[]): Derived
     result,
     winningLine,
     moveCount,
+    vsComputer: create.vsComputer ?? false,
     createdAt: create.timestamp,
     updatedAt,
   }

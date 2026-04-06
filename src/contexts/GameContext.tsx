@@ -18,7 +18,7 @@ interface GameContextType {
   games: DerivedGame[]
   activeGame: DerivedGame | null
   isLoading: boolean
-  createGame: (gameType?: GameType, options?: { gridSize?: GridSize; nimConfig?: number[] }) => Promise<string | null>
+  createGame: (gameType?: GameType, options?: { gridSize?: GridSize; nimConfig?: number[]; vsComputer?: boolean }) => Promise<string | null>
   joinGame: (gameId: string, hostAddress?: string, gameType?: GameType) => Promise<boolean>
   makeMove: (gameId: string, move: MovePayload) => Promise<boolean>
   loadGame: (gameId: string) => void
@@ -71,7 +71,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const createGame = useCallback(async (
     gameType: GameType = 'tic-tac-toe',
-    options?: { gridSize?: GridSize; nimConfig?: number[] }
+    options?: { gridSize?: GridSize; nimConfig?: number[]; vsComputer?: boolean }
   ): Promise<string | null> => {
     if (!isConnected || !address) {
       addNotification('error', 'Connect your wallet to create a game')
@@ -91,13 +91,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         gameType: gameType !== 'tic-tac-toe' ? gameType : undefined,
         gridSize: options?.gridSize && options.gridSize !== 3 ? options.gridSize : undefined,
         nimConfig: options?.nimConfig,
+        vsComputer: options?.vsComputer || undefined,
         timestamp: Date.now(),
       }
 
       statementStore.applyAndSubmit(stmt)
+
+      // Auto-join as computer opponent
+      if (options?.vsComputer) {
+        const joinStmt: GameStatement = {
+          type: 'join_game',
+          gameId,
+          playerO: 'computer',
+          playerOName: 'Computer',
+          timestamp: Date.now(),
+        }
+        statementStore.applyLocal(joinStmt)
+      }
+
       setActiveGameId(gameId)
       prevMoveCountRef.current = 0
-      addNotification('success', `Game created! Share code: ${gameId}`)
+      addNotification('success', options?.vsComputer ? 'Game started vs Computer!' : `Game created! Share code: ${gameId}`)
       return gameId
     } catch (err) {
       console.error('[Game] Create failed:', err)
@@ -121,7 +135,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const normalizedId = gameId.trim().toUpperCase()
       let game = statementStore.getGame(normalizedId)
 
-      // If game not found locally, bootstrap from URL params (gameType + host)
       if (!game && hostAddress) {
         if (hostAddress === address) {
           addNotification('error', 'You cannot join your own game')

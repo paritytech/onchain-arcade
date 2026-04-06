@@ -107,6 +107,7 @@ export function deriveConnectFour(gameId: string, stmts: GameStatement[]): Deriv
     result,
     winningLine,
     moveCount,
+    vsComputer: create.vsComputer ?? false,
     createdAt: create.timestamp,
     updatedAt,
   }

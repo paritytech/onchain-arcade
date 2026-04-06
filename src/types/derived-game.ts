@@ -11,6 +11,7 @@ export interface DerivedGameBase {
   status: GameStatus
   result: GameResult
   moveCount: number
+  vsComputer: boolean
   createdAt: number
   updatedAt: number
 }

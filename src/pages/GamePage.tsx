@@ -1,22 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Copy, Share2, RotateCcw, Gamepad2, UserPlus } from 'lucide-react'
+import { ArrowLeft, Copy, Share2, RotateCcw, Gamepad2, UserPlus, Info } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { GameBoard } from '@/lib/games/tic-tac-toe'
-import { ConnectFourBoard } from '@/lib/games/connect-four'
-import { NimBoard } from '@/lib/games/nim-game'
-import { DotsAndBoxesBoard } from '@/lib/games/dots-and-boxes'
-import { MancalaBoard } from '@/lib/games/mancala'
-import { ReversiBoard } from '@/lib/games/reversi'
+import { GameBoard, getBestMove } from '@/lib/games/tic-tac-toe'
+import { ConnectFourBoard, getBestColumnMove } from '@/lib/games/connect-four'
+import { NimBoard, getBestNimMove } from '@/lib/games/nim-game'
+import { DotsAndBoxesBoard, getBestEdgeMove } from '@/lib/games/dots-and-boxes'
+import { MancalaBoard, getBestPitMove } from '@/lib/games/mancala'
+import { ReversiBoard, getBestReversiMove } from '@/lib/games/reversi'
 import { staggerContainer, staggerItem } from '@/lib/animation-variants'
 import { usePolkadotWallet } from '@/contexts/WalletContext'
 import { useGame } from '@/contexts/GameContext'
 import { useNotifications } from '@/contexts/NotificationProvider'
 import { truncateAddress } from '@/lib/utils'
+import { Modal } from '@/components/ui/Modal'
+import { GAME_RULES } from '@/lib/game-rules'
 
 export function GamePage() {
   const [searchParams] = useSearchParams()
@@ -28,6 +30,7 @@ export function GamePage() {
   const { activeGame, loadGame, makeMove, createGame, joinGame, leaveGame, isLoading } = useGame()
   const { addNotification } = useNotifications()
   const [gameNotFound, setGameNotFound] = useState(false)
+  const [showRules, setShowRules] = useState(false)
 
   useEffect(() => {
     if (gameId) {
@@ -63,13 +66,65 @@ export function GamePage() {
   }
 
   const playerRole = useMemo(() => {
-    if (!activeGame || !address) return null
+    if (!activeGame) return null
     if (activeGame.playerX === address) return 'X' as const
     if (activeGame.playerO === address) return 'O' as const
     return null
   }, [activeGame, address])
 
   const isMyTurn = activeGame?.status === 'playing' && activeGame.currentTurn === playerRole
+
+  // Computer auto-move for vs Computer TTT games
+  // Computer auto-move for all vs Computer games
+  useEffect(() => {
+    if (!activeGame || activeGame.status !== 'playing' || !activeGame.vsComputer) return
+    if (activeGame.currentTurn !== 'O') return // Computer is always O
+
+    const timer = setTimeout(() => {
+      let stmt: any = null
+
+      switch (activeGame.gameType) {
+        case 'tic-tac-toe': {
+          const cell = getBestMove(activeGame.board, activeGame.gridSize, 'O')
+          if (cell >= 0) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', cellIndex: cell, timestamp: Date.now() }
+          break
+        }
+        case 'connect-four': {
+          const col = getBestColumnMove(activeGame.board, 'O')
+          if (col >= 0) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', column: col, timestamp: Date.now() }
+          break
+        }
+        case 'nim': {
+          const move = getBestNimMove(activeGame.heaps)
+          stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', nimMove: move, timestamp: Date.now() }
+          break
+        }
+        case 'dots-and-boxes': {
+          const edge = getBestEdgeMove(activeGame.lines)
+          if (edge) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', edge, timestamp: Date.now() }
+          break
+        }
+        case 'mancala': {
+          const pit = getBestPitMove(activeGame.pits, false) // Computer is O (not X)
+          if (pit >= 0) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', pit, timestamp: Date.now() }
+          break
+        }
+        case 'reversi': {
+          const cell = getBestReversiMove(activeGame.board, 'O', activeGame.validMoves)
+          if (cell >= 0) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', cellIndex: cell, timestamp: Date.now() }
+          break
+        }
+      }
+
+      if (stmt) {
+        import('@/lib/statementStore').then(({ statementStore }) => {
+          statementStore.applyLocal(stmt)
+        })
+      }
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [activeGame?.id, activeGame?.status, activeGame?.currentTurn, activeGame?.vsComputer, activeGame?.moveCount])
 
   const handleCellClick = async (index: number) => {
     if (!activeGame || !isMyTurn) return
@@ -130,15 +185,9 @@ export function GamePage() {
           <h2 className="font-serif text-h3 text-text-primary mb-2">No Game Selected</h2>
           <p className="text-text-secondary mb-6">Create a new game or join one with a code.</p>
           <div className="flex gap-3 justify-center">
-            {isConnected ? (
-              <Button variant="primary" onClick={handleNewGame}>
-                Create Game
-              </Button>
-            ) : (
-              <Button variant="primary" disabled>
-                Connect Wallet to Play
-              </Button>
-            )}
+            <Button variant="primary" onClick={handleNewGame}>
+              Create Game
+            </Button>
             <Button variant="secondary" onClick={() => navigate('/')}>
               Go Home
             </Button>
@@ -171,20 +220,13 @@ export function GamePage() {
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-brand/10 flex items-center justify-center">
             <Gamepad2 className="w-8 h-8 text-brand" />
           </div>
-          {hostAddress && isConnected ? (
+          {hostAddress ? (
             <>
               <h2 className="font-serif text-h3 text-text-primary mb-2">Joining as Player O...</h2>
               <p className="text-text-secondary mb-6">
                 Connecting to game <span className="font-mono text-brand">{gameId}</span>
               </p>
               <LoadingSpinner size="md" />
-            </>
-          ) : !isConnected ? (
-            <>
-              <h2 className="font-serif text-h3 text-text-primary mb-2">Connect Wallet</h2>
-              <p className="text-text-secondary mb-6">
-                Connect your wallet to join game <span className="font-mono text-brand">{gameId}</span>
-              </p>
             </>
           ) : (
             <>
@@ -248,6 +290,13 @@ export function GamePage() {
           Back
         </Button>
         <span className="font-mono text-text-secondary text-body-sm">Game #{activeGame.id}</span>
+        <button
+          onClick={() => setShowRules(true)}
+          className="p-1 rounded-lg hover:bg-grey-800/50 transition-colors text-grey-500 hover:text-grey-300"
+          aria-label="Game rules"
+        >
+          <Info className="w-4 h-4" />
+        </button>
       </motion.div>
 
       {/* Status Bar */}
@@ -410,13 +459,37 @@ export function GamePage() {
 
 
       {/* Waiting hint for game creator */}
-      {activeGame.status === 'waiting' && playerRole && isConnected && (
+      {activeGame.status === 'waiting' && playerRole && (
         <motion.div variants={staggerItem} className="text-center">
           <p className="text-text-secondary text-body-sm">
             Share the game link with a friend to start playing.
           </p>
         </motion.div>
       )}
+      {/* Rules Modal */}
+      <Modal
+        isOpen={showRules}
+        onClose={() => setShowRules(false)}
+        title={GAME_RULES[activeGame.gameType]?.title || 'Rules'}
+      >
+        {(() => {
+          const rules = GAME_RULES[activeGame.gameType]
+          if (!rules) return null
+          return (
+            <div className="space-y-3">
+              <p className="text-body-sm text-text-secondary">{rules.description}</p>
+              <ul className="space-y-2">
+                {rules.rules.map((rule, i) => (
+                  <li key={i} className="flex gap-2 text-body-sm text-text-primary">
+                    <span className="text-brand font-bold shrink-0">{i + 1}.</span>
+                    <span>{rule}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        })()}
+      </Modal>
     </motion.div>
   )
 }
