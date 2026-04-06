@@ -12,6 +12,11 @@ import { NimBoard, getBestNimMove } from '@/lib/games/nim-game'
 import { DotsAndBoxesBoard, getBestEdgeMove } from '@/lib/games/dots-and-boxes'
 import { MancalaBoard, getBestPitMove } from '@/lib/games/mancala'
 import { ReversiBoard, getBestReversiMove } from '@/lib/games/reversi'
+import { GhostBoard, getBestGhostMove } from '@/lib/games/ghost'
+import { HackenbushBoard, getBestHackenbushMove } from '@/lib/games/hackenbush'
+import { EntropyBoard, getBestEntropyMove } from '@/lib/games/entropy'
+import { BlokusDuoBoard, getBestBlokusMove } from '@/lib/games/blokus-duo'
+import { TakBoard, getBestTakMove } from '@/lib/games/tak'
 import { staggerContainer, staggerItem } from '@/lib/animation-variants'
 import { usePolkadotWallet } from '@/contexts/WalletContext'
 import { useGame } from '@/contexts/GameContext'
@@ -112,6 +117,36 @@ export function GamePage() {
         case 'reversi': {
           const cell = getBestReversiMove(activeGame.board, 'O', activeGame.validMoves)
           if (cell >= 0) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', cellIndex: cell, timestamp: Date.now() }
+          break
+        }
+        case 'ghost': {
+          const move = getBestGhostMove(activeGame.fragment)
+          if ('ghostLetter' in move) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', ghostLetter: move.ghostLetter, timestamp: Date.now() }
+          else stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', ghostChallenge: true, timestamp: Date.now() }
+          break
+        }
+        case 'hackenbush': {
+          const edgeId = getBestHackenbushMove(activeGame.edges, activeGame.nodes, activeGame.groundNodes, 'B')
+          if (edgeId >= 0) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', hackenbushEdge: edgeId, timestamp: Date.now() }
+          break
+        }
+        case 'entropy': {
+          const move = getBestEntropyMove(activeGame.board, activeGame.nextPiece, activeGame.phase, activeGame.piecesPlaced)
+          if ('entropyPlace' in move) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', entropyPlace: move.entropyPlace, timestamp: Date.now() }
+          else if ('entropySlide' in move) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', entropySlide: move.entropySlide, timestamp: Date.now() }
+          else stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', entropyPass: true, timestamp: Date.now() }
+          break
+        }
+        case 'blokus-duo': {
+          const move = getBestBlokusMove(activeGame.board, activeGame.remainingPieces.O, 'O', activeGame.scores.O === 0)
+          if (move && 'blokusMove' in move) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', blokusMove: move.blokusMove, timestamp: Date.now() }
+          else stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', blokusPass: true, timestamp: Date.now() }
+          break
+        }
+        case 'tak': {
+          const move = getBestTakMove(activeGame.board, activeGame.flatStones, activeGame.capstones, 'O', activeGame.firstMoveDone)
+          if (move && 'takPlace' in move) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', takPlace: move.takPlace, timestamp: Date.now() }
+          else if (move && 'takMove' in move) stmt = { type: 'make_move', gameId: activeGame.id, player: 'computer', takMove: move.takMove, timestamp: Date.now() }
           break
         }
       }
@@ -420,12 +455,73 @@ export function GamePage() {
             isPlayable={activeGame.status === 'playing'}
             onMove={handleNimMove}
           />
+        ) : activeGame.gameType === 'ghost' ? (
+          <GhostBoard
+            fragment={activeGame.fragment}
+            ghostLetters={activeGame.ghostLetters}
+            challengeResult={activeGame.challengeResult}
+            currentTurn={activeGame.currentTurn}
+            isMyTurn={isMyTurn}
+            isPlayable={activeGame.status === 'playing'}
+            onAddLetter={(l) => makeMove(activeGame.id, { ghostLetter: l })}
+            onChallenge={() => makeMove(activeGame.id, { ghostChallenge: true })}
+          />
+        ) : activeGame.gameType === 'hackenbush' ? (
+          <HackenbushBoard
+            edges={activeGame.edges}
+            nodes={activeGame.nodes}
+            groundNodes={activeGame.groundNodes}
+            currentTurn={activeGame.currentTurn}
+            isMyTurn={isMyTurn}
+            isPlayable={activeGame.status === 'playing'}
+            onRemoveEdge={(id) => makeMove(activeGame.id, { hackenbushEdge: id })}
+          />
+        ) : activeGame.gameType === 'entropy' ? (
+          <EntropyBoard
+            board={activeGame.board}
+            nextPiece={activeGame.nextPiece}
+            piecesPlaced={activeGame.piecesPlaced}
+            round={activeGame.round}
+            phase={activeGame.phase}
+            scores={activeGame.scores}
+            chaosPlayer={activeGame.chaosPlayer}
+            isMyTurn={isMyTurn}
+            isPlayable={activeGame.status === 'playing'}
+            onPlace={(i) => makeMove(activeGame.id, { entropyPlace: i })}
+            onSlide={(f, t) => makeMove(activeGame.id, { entropySlide: { from: f, to: t } })}
+            onPassSlide={() => makeMove(activeGame.id, { entropyPass: true })}
+          />
+        ) : activeGame.gameType === 'blokus-duo' ? (
+          <BlokusDuoBoard
+            board={activeGame.board}
+            remainingPieces={activeGame.remainingPieces}
+            scores={activeGame.scores}
+            consecutivePasses={activeGame.consecutivePasses}
+            currentTurn={activeGame.currentTurn}
+            isMyTurn={isMyTurn}
+            isPlayable={activeGame.status === 'playing'}
+            onPlacePiece={(pid, pos, rot, flip) => makeMove(activeGame.id, { blokusMove: { pieceId: pid, position: pos, rotation: rot, flip } })}
+            onPass={() => makeMove(activeGame.id, { blokusPass: true })}
+          />
+        ) : activeGame.gameType === 'tak' ? (
+          <TakBoard
+            board={activeGame.board}
+            flatStones={activeGame.flatStones}
+            capstones={activeGame.capstones}
+            road={activeGame.road}
+            currentTurn={activeGame.currentTurn}
+            isMyTurn={isMyTurn}
+            isPlayable={activeGame.status === 'playing'}
+            firstMoveDone={activeGame.firstMoveDone}
+            onPlace={(pos, type) => makeMove(activeGame.id, { takPlace: { position: pos, pieceType: type } })}
+            onMove={(from, dir, drops) => makeMove(activeGame.id, { takMove: { from, direction: dir, drops } })}
+          />
         ) : (
           <GameBoard
-            board={activeGame.board}
-            gridSize={activeGame.gridSize}
+            board={(activeGame as any).board}
+            gridSize={(activeGame as any).gridSize}
             currentTurn={activeGame.currentTurn}
-            winningLine={activeGame.winningLine}
+            winningLine={(activeGame as any).winningLine}
             isMyTurn={isMyTurn}
             isPlayable={activeGame.status === 'playing'}
             onCellClick={handleCellClick}

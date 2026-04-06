@@ -77,4 +77,61 @@ export const GAME_RULES: Record<GameType, GameRules> = {
       'The player with the most discs wins.',
     ],
   },
+  'ghost': {
+    title: 'Ghost',
+    description: 'Add letters to a growing word — but don\'t complete it.',
+    rules: [
+      'Players take turns adding one letter to a growing fragment.',
+      'If the fragment becomes a valid word (4+ letters), you lose that round.',
+      'You can challenge if you think the fragment isn\'t a prefix of any word.',
+      'Wrong challenge = you get a ghost letter. Correct challenge = opponent gets one.',
+      'Accumulate G-H-O-S-T (5 letters) and you\'re eliminated.',
+    ],
+  },
+  'hackenbush': {
+    title: 'Hackenbush',
+    description: 'Remove colored edges from a graph — don\'t get disconnected.',
+    rules: [
+      'A graph of red and blue edges is connected to a ground line.',
+      'Red player removes red edges, blue player removes blue edges.',
+      'After removing an edge, anything disconnected from the ground falls away.',
+      'The last player able to make a move wins.',
+      'Choose your cuts carefully — one removal can cascade!',
+    ],
+  },
+  'entropy': {
+    title: 'Entropy',
+    description: 'Chaos places pieces, Order arranges them — asymmetric strategy.',
+    rules: [
+      '35 colored pieces (5 colors × 7) are placed on a 7×7 board.',
+      'Chaos places each piece on any empty cell.',
+      'After each placement, Order can slide one piece orthogonally.',
+      'Score is based on consecutive runs of the same color in rows and columns.',
+      'After all pieces are placed, roles swap for round 2.',
+      'The Order player with the highest total score wins.',
+    ],
+  },
+  'blokus-duo': {
+    title: 'Blokus Duo',
+    description: 'Place polyomino shapes — corners only, no edges.',
+    rules: [
+      'Each player has 21 polyomino pieces (1-5 squares each).',
+      'Place pieces so they touch your color only at corners, never edges.',
+      'Your first piece must cover your starting corner.',
+      'If you can\'t place, you pass. Two consecutive passes end the game.',
+      'The player with the most squares placed wins.',
+    ],
+  },
+  'tak': {
+    title: 'Tak',
+    description: 'Place and stack pieces to build a road across the board.',
+    rules: [
+      'Place flat stones, walls, or capstones on a 5×5 board.',
+      'First move: you must place your opponent\'s flat stone.',
+      'Move stacks in a straight line, dropping pieces along the way.',
+      'Capstones can flatten walls when landing on them.',
+      'Win by building a road — connected flat stones/capstones from one edge to the opposite.',
+      'If the board fills, the player with more flat stones on top wins.',
+    ],
+  },
 }

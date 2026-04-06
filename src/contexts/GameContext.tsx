@@ -13,6 +13,16 @@ export type MovePayload =
   | { heap: number; count: number }
   | { edge: string }
   | { pit: number }
+  | { ghostLetter: string }
+  | { ghostChallenge: true }
+  | { hackenbushEdge: number }
+  | { entropyPlace: number }
+  | { entropySlide: { from: number; to: number } }
+  | { entropyPass: true }
+  | { blokusMove: { pieceId: number; position: number; rotation: number; flip: boolean } }
+  | { blokusPass: true }
+  | { takPlace: { position: number; pieceType: 'flat' | 'wall' | 'capstone' } }
+  | { takMove: { from: number; direction: 'N' | 'S' | 'E' | 'W'; drops: number[] } }
 
 interface GameContextType {
   games: DerivedGame[]
@@ -208,6 +218,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       ...('heap' in move ? { nimMove: { heap: move.heap, count: move.count } } : {}),
       ...('edge' in move ? { edge: move.edge } : {}),
       ...('pit' in move ? { pit: move.pit } : {}),
+      ...('ghostLetter' in move ? { ghostLetter: move.ghostLetter } : {}),
+      ...('ghostChallenge' in move ? { ghostChallenge: true } : {}),
+      ...('hackenbushEdge' in move ? { hackenbushEdge: move.hackenbushEdge } : {}),
+      ...('entropyPlace' in move ? { entropyPlace: move.entropyPlace } : {}),
+      ...('entropySlide' in move ? { entropySlide: move.entropySlide } : {}),
+      ...('entropyPass' in move ? { entropyPass: true } : {}),
+      ...('blokusMove' in move ? { blokusMove: move.blokusMove } : {}),
+      ...('blokusPass' in move ? { blokusPass: true } : {}),
+      ...('takPlace' in move ? { takPlace: move.takPlace } : {}),
+      ...('takMove' in move ? { takMove: move.takMove } : {}),
       timestamp: Date.now(),
     }
 

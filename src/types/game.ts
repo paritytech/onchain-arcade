@@ -4,7 +4,7 @@ export type GameStatus = 'waiting' | 'playing' | 'finished';
 export type GameResult = 'x_wins' | 'o_wins' | 'draw' | null;
 export type PlayerSymbol = 'X' | 'O';
 export type GridSize = 3 | 5 | 7;
-export type GameType = 'tic-tac-toe' | 'connect-four' | 'nim' | 'dots-and-boxes' | 'mancala' | 'reversi';
+export type GameType = 'tic-tac-toe' | 'connect-four' | 'nim' | 'dots-and-boxes' | 'mancala' | 'reversi' | 'ghost' | 'hackenbush' | 'entropy' | 'blokus-duo' | 'tak';
 
 /** Win-length required for each grid size */
 export const WIN_LENGTH: Record<GridSize, number> = { 3: 3, 5: 4, 7: 5 };
@@ -86,6 +86,8 @@ export interface CreateGameStatement {
   gridSize?: GridSize
   nimConfig?: number[]
   vsComputer?: boolean
+  hackenbushConfig?: string
+  entropyConfig?: { seed?: number }
   timestamp: number
 }
 
@@ -106,6 +108,16 @@ export interface MakeMoveStatement {
   nimMove?: { heap: number; count: number }
   edge?: string
   pit?: number
+  ghostLetter?: string
+  ghostChallenge?: boolean
+  hackenbushEdge?: number
+  entropyPlace?: number
+  entropySlide?: { from: number; to: number }
+  entropyPass?: boolean
+  blokusMove?: { pieceId: number; position: number; rotation: number; flip: boolean }
+  blokusPass?: boolean
+  takPlace?: { position: number; pieceType: 'flat' | 'wall' | 'capstone' }
+  takMove?: { from: number; direction: 'N' | 'S' | 'E' | 'W'; drops: number[] }
   timestamp: number
 }
 

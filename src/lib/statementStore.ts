@@ -217,6 +217,16 @@ class StatementStore {
         if (s.nimMove && stmt.nimMove) return s.nimMove.heap === stmt.nimMove.heap && s.nimMove.count === stmt.nimMove.count
         if (s.edge != null && stmt.edge != null) return s.edge === stmt.edge
         if (s.pit != null && stmt.pit != null) return s.pit === stmt.pit
+        if (s.ghostLetter && stmt.ghostLetter) return s.ghostLetter === stmt.ghostLetter
+        if (s.ghostChallenge && stmt.ghostChallenge) return true
+        if (s.hackenbushEdge != null && stmt.hackenbushEdge != null) return s.hackenbushEdge === stmt.hackenbushEdge
+        if (s.entropyPlace != null && stmt.entropyPlace != null) return s.entropyPlace === stmt.entropyPlace
+        if (s.entropySlide && stmt.entropySlide) return s.entropySlide.from === stmt.entropySlide.from && s.entropySlide.to === stmt.entropySlide.to
+        if (s.entropyPass && stmt.entropyPass) return true
+        if (s.blokusMove && stmt.blokusMove) return s.blokusMove.pieceId === stmt.blokusMove.pieceId && s.blokusMove.position === stmt.blokusMove.position
+        if (s.blokusPass && stmt.blokusPass) return true
+        if (s.takPlace && stmt.takPlace) return s.takPlace.position === stmt.takPlace.position
+        if (s.takMove && stmt.takMove) return s.takMove.from === stmt.takMove.from && s.takMove.direction === stmt.takMove.direction
         return false
       }
       return false

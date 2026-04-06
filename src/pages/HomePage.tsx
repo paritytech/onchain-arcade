@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Copy, Check, Grid3X3, Layers, CircleDot, Box, Gem, Disc, Info } from 'lucide-react'
+import { Copy, Check, Grid3X3, Layers, CircleDot, Box, Gem, Disc, Info, Type, Scissors, Shuffle, Puzzle, Castle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { staggerContainer, staggerItem } from '@/lib/animation-variants'
@@ -53,6 +53,11 @@ export function HomePage() {
       case 'dots-and-boxes':
       case 'mancala':
       case 'reversi':
+      case 'ghost':
+      case 'hackenbush':
+      case 'entropy':
+      case 'blokus-duo':
+      case 'tak':
         gameId = await createGame(gameType, { vsComputer })
         break
     }
@@ -323,6 +328,106 @@ export function HomePage() {
               Place discs to flip opponent pieces. Most discs when no moves remain wins. Classic Othello rules.
             </p>
             <GameButtons game="reversi" color="teal" />
+          </div>
+        </motion.div>
+
+        {/* --- Ghost --- */}
+        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-rose-500/20 bg-gradient-to-b from-rose-950/40 to-grey-900/80">
+          <div className="relative p-6 space-y-5">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-rose-500/15 flex items-center justify-center mb-3">
+                <Type className="w-5 h-5 text-rose-400" aria-hidden="true" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-lg font-bold text-text-primary tracking-tight">Ghost</h3>
+                <InfoBtn game="ghost" />
+              </div>
+              <p className="text-caption text-grey-400 mt-0.5">Word game — don't finish the word</p>
+            </div>
+            <p className="text-caption text-grey-500 leading-relaxed">
+              Add letters to a growing word. Complete a 4+ letter word and you lose. Accumulate G-H-O-S-T and you're out.
+            </p>
+            <GameButtons game="ghost" color="rose" />
+          </div>
+        </motion.div>
+
+        {/* --- Hackenbush --- */}
+        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-red-500/20 bg-gradient-to-b from-red-950/40 to-grey-900/80">
+          <div className="relative p-6 space-y-5">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center mb-3">
+                <Scissors className="w-5 h-5 text-red-400" aria-hidden="true" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-lg font-bold text-text-primary tracking-tight">Hackenbush</h3>
+                <InfoBtn game="hackenbush" />
+              </div>
+              <p className="text-caption text-grey-400 mt-0.5">Cut edges, collapse the graph</p>
+            </div>
+            <p className="text-caption text-grey-500 leading-relaxed">
+              Remove colored edges from a graph. Disconnected parts fall. Last player to move wins.
+            </p>
+            <GameButtons game="hackenbush" color="red" />
+          </div>
+        </motion.div>
+
+        {/* --- Entropy --- */}
+        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-b from-sky-950/40 to-grey-900/80">
+          <div className="relative p-6 space-y-5">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-sky-500/15 flex items-center justify-center mb-3">
+                <Shuffle className="w-5 h-5 text-sky-400" aria-hidden="true" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-lg font-bold text-text-primary tracking-tight">Entropy</h3>
+                <InfoBtn game="entropy" />
+              </div>
+              <p className="text-caption text-grey-400 mt-0.5">Chaos vs Order — asymmetric strategy</p>
+            </div>
+            <p className="text-caption text-grey-500 leading-relaxed">
+              Chaos places colored pieces randomly. Order slides them into scoring rows. Roles swap after round 1.
+            </p>
+            <GameButtons game="entropy" color="sky" />
+          </div>
+        </motion.div>
+
+        {/* --- Blokus Duo --- */}
+        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-fuchsia-500/20 bg-gradient-to-b from-fuchsia-950/40 to-grey-900/80">
+          <div className="relative p-6 space-y-5">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-fuchsia-500/15 flex items-center justify-center mb-3">
+                <Puzzle className="w-5 h-5 text-fuchsia-400" aria-hidden="true" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-lg font-bold text-text-primary tracking-tight">Blokus Duo</h3>
+                <InfoBtn game="blokus-duo" />
+              </div>
+              <p className="text-caption text-grey-400 mt-0.5">Polyomino spatial puzzle</p>
+            </div>
+            <p className="text-caption text-grey-500 leading-relaxed">
+              Place tetromino-style shapes on a 14x14 board. Touch corners only, never edges. Most squares wins.
+            </p>
+            <GameButtons game="blokus-duo" color="fuchsia" />
+          </div>
+        </motion.div>
+
+        {/* --- Tak --- */}
+        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-orange-500/20 bg-gradient-to-b from-orange-950/40 to-grey-900/80">
+          <div className="relative p-6 space-y-5">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center mb-3">
+                <Castle className="w-5 h-5 text-orange-400" aria-hidden="true" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-lg font-bold text-text-primary tracking-tight">Tak</h3>
+                <InfoBtn game="tak" />
+              </div>
+              <p className="text-caption text-grey-400 mt-0.5">Stack pieces, build roads</p>
+            </div>
+            <p className="text-caption text-grey-500 leading-relaxed">
+              Place and stack flat stones, walls, and capstones on a 5x5 board. Build a road to connect opposite edges.
+            </p>
+            <GameButtons game="tak" color="orange" />
           </div>
         </motion.div>
 
