@@ -129,7 +129,7 @@ export function HomePage() {
     >
       {/* Title */}
       <motion.div variants={staggerItem} className="text-center">
-        <h1 className="font-serif text-h1 text-text-primary mb-1">Game Arena</h1>
+        <h1 className="font-serif text-h1 text-text-primary mb-1">onchain arcade</h1>
         <p className="text-body-sm text-text-secondary">Pick a game, share the code, play in real-time</p>
       </motion.div>
 

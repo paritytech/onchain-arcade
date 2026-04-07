@@ -10,10 +10,10 @@ import { isInTriangleHost } from '../lib/triangle';
 import { initStorage, getStorage } from '../lib/storage';
 import type { ProductAccountId } from '@novasamatech/product-sdk';
 
-const DAPP_NAME = 'Tick-tack-toe';
+const DAPP_NAME = 'onchain-arcade';
 const PAS_DECIMALS = 10;
-const STORAGE_KEY_WALLET = 'Tick-tack-toe_wallet_name';
-const STORAGE_KEY_ACCOUNT = 'Tick-tack-toe_account_address';
+const STORAGE_KEY_WALLET = 'onchain_arcade_wallet_name';
+const STORAGE_KEY_ACCOUNT = 'onchain_arcade_account_address';
 
 type WalletMode = 'detecting' | 'host' | 'standalone';
 
