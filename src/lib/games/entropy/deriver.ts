@@ -171,15 +171,10 @@ export function deriveEntropy(gameId: string, stmts: GameStatement[]): DerivedEn
       moveCount++
       updatedAt = stmt.timestamp
 
-      if (piecesPlaced >= TOTAL_PIECES) {
-        // All pieces placed, but Order gets one final slide opportunity
-        phase = 'order'
-        currentTurn = orderPlayer
-      } else {
-        // Switch to Order phase
-        phase = 'order'
-        currentTurn = orderPlayer
-      }
+      // Switch to Order phase (Order always gets a slide/pass after each Chaos placement,
+      // including after the final piece — Order's pass then triggers finishRound)
+      phase = 'order'
+      currentTurn = orderPlayer
     } else {
       // Order slides or passes
       if (stmt.entropyPass) {

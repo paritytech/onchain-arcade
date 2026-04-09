@@ -10,7 +10,7 @@
     "relay": "node server/relay.js"
   },
   "dependencies": {
-    "@novasamatech/product-sdk": "^0.6.6-1",
+    "@novasamatech/product-sdk": "^0.6.15",
     "@polkadot-api/sdk-ink": "^0.5.0",
     "@talismn/connect-wallets": "^1.2.0",
     "clsx": "^2.1.1",

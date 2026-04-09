@@ -22,7 +22,7 @@ function Pit({ count, highlighted, clickable, onClick, label }: {
       className={cn(
         'w-14 h-16 md:w-16 md:h-20 rounded-xl flex flex-col items-center justify-center gap-1',
         'border-2 transition-all',
-        highlighted ? 'border-brand bg-brand/10' : 'border-grey-700 bg-grey-800/50',
+        highlighted ? 'border-brand bg-brand/10' : 'border-grey-300 dark:border-grey-700 bg-grey-100 dark:bg-grey-800/50',
         clickable && 'cursor-pointer hover:border-brand/50 hover:bg-brand/5',
         !clickable && 'cursor-default opacity-70',
       )}
@@ -38,7 +38,7 @@ function Store({ count, label, color }: { count: number; label: string; color: s
   return (
     <div className={cn(
       'w-16 md:w-20 h-full min-h-[140px] rounded-2xl flex flex-col items-center justify-center gap-1',
-      'border-2 border-grey-700 bg-grey-800/50',
+      'border-2 border-grey-300 dark:border-grey-700 bg-grey-100 dark:bg-grey-800/50',
     )}>
       <span className={cn('text-2xl font-bold', color)}>{count}</span>
       <span className="text-[10px] text-grey-500">{label}</span>
@@ -65,7 +65,7 @@ export function MancalaBoard({ pits, lastSowEnd, isMyTurn, isPlayable, isPlayerX
     <div className="space-y-2">
       <div className="flex items-stretch gap-2 justify-center">
         {/* O's Store (left) */}
-        <Store count={pits[13]} label="O" color="text-blue-400" />
+        <Store count={pits[13]} label="P2" color="text-blue-400" />
 
         <div className="flex flex-col gap-2 justify-center">
           {/* O's pits (top row, right to left) */}
@@ -98,7 +98,7 @@ export function MancalaBoard({ pits, lastSowEnd, isMyTurn, isPlayable, isPlayerX
         </div>
 
         {/* X's Store (right) */}
-        <Store count={pits[6]} label="X" color="text-pink-400" />
+        <Store count={pits[6]} label="P1" color="text-pink-400" />
       </div>
 
       <p className="text-caption text-grey-500 text-center">

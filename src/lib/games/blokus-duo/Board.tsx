@@ -136,7 +136,7 @@ export function BlokusDuoBoard({
       {/* Board */}
       <div className="relative">
         <div
-          className="grid gap-0 w-fit mx-auto bg-grey-800 p-1 rounded-xl"
+          className="grid gap-0 w-fit mx-auto bg-grey-200 dark:bg-grey-800 p-1 rounded-xl border border-grey-300 dark:border-grey-700"
           style={{ gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))` }}
         >
           {board.map((cell, index) => {
@@ -152,9 +152,9 @@ export function BlokusDuoBoard({
                 onMouseLeave={() => setHoveredCell(null)}
                 disabled={!canAct}
                 className={cn(
-                  'w-[22px] h-[22px] border border-grey-700 flex items-center justify-center transition-colors',
-                  'bg-grey-900',
-                  canAct && selectedPiece != null && 'cursor-crosshair hover:bg-grey-700',
+                  'w-[22px] h-[22px] border border-grey-300 dark:border-grey-700 flex items-center justify-center transition-colors',
+                  'bg-grey-100 dark:bg-grey-900',
+                  canAct && selectedPiece != null && 'cursor-crosshair hover:bg-grey-200 dark:hover:bg-grey-700',
                   !canAct && 'cursor-default',
                 )}
                 aria-label={
@@ -182,7 +182,7 @@ export function BlokusDuoBoard({
                   <div className={cn('w-[18px] h-[18px] rounded-sm opacity-50', pieceBoardColor)} />
                 ) : (isStartX || isStartO) ? (
                   <div className={cn(
-                    'w-[6px] h-[6px] rounded-full opacity-30',
+                    'w-[10px] h-[10px] rounded-full opacity-60',
                     isStartX ? 'bg-rose-400' : 'bg-blue-400',
                   )} />
                 ) : null}

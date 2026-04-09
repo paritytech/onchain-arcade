@@ -56,7 +56,7 @@ function useStatementStoreGames(): DerivedGame[] {
 }
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
-  const { isConnected, address, productAccountId, displayName } = usePolkadotWallet()
+  const { address, productAccountId, displayName } = usePolkadotWallet()
   const { addNotification } = useNotifications()
   const games = useStatementStoreGames()
   const [activeGameId, setActiveGameId] = useState<string | null>(null)
@@ -86,7 +86,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     gameType: GameType = 'tic-tac-toe',
     options?: { gridSize?: GridSize; nimConfig?: number[]; vsComputer?: boolean; maxPlayers?: number }
   ): Promise<string | null> => {
-    if (!isConnected || !address) {
+    if (!address) {
       addNotification('error', 'Connect your wallet to create a game')
       return null
     }
@@ -134,11 +134,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [isConnected, address, productAccountId, displayName, addNotification])
+  }, [address, productAccountId, displayName, addNotification])
 
   const joinGame = useCallback(async (gameId: string, hostAddress?: string, gameType?: GameType): Promise<boolean> => {
-    if (!isConnected || !address) {
-      addNotification('error', 'Connect your wallet to join a game')
+    if (!address) {
+      addNotification('error', 'Wallet still connecting, please try again')
       return false
     }
 
@@ -197,10 +197,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [isConnected, address, productAccountId, displayName, addNotification])
+  }, [address, productAccountId, displayName, addNotification])
 
   const makeMove = useCallback(async (gameId: string, move: MovePayload): Promise<boolean> => {
-    if (!isConnected || !address) return false
+    if (!address) return false
 
     const game = statementStore.getGame(gameId)
     if (!game) return false
@@ -251,7 +251,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
 
     return true
-  }, [isConnected, address, addNotification])
+  }, [address, addNotification])
 
   const loadGame = useCallback((gameId: string) => {
     const normalizedId = gameId.toUpperCase()

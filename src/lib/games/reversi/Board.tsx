@@ -33,8 +33,8 @@ export function ReversiBoard({ board, validMoves, scores, currentTurn, isMyTurn,
   return (
     <div className="space-y-3">
       <div className="flex justify-center gap-6 text-body-sm font-semibold">
-        <span className="text-grey-300">X (Dark): {scores.X}</span>
-        <span className="text-grey-100">O (Light): {scores.O}</span>
+        <span className="text-grey-700 dark:text-grey-300">X (Dark): {scores.X}</span>
+        <span className="text-grey-500 dark:text-grey-100">O (Light): {scores.O}</span>
       </div>
 
       <div className="relative">

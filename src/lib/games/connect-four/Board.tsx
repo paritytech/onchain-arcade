@@ -75,9 +75,9 @@ export function ConnectFourBoard({ board, currentTurn, winningLine, isMyTurn, is
               disabled={!canClick(col)}
               className={cn(
                 'w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center',
-                'bg-blue-950 dark:bg-grey-900 transition-all duration-150',
+                'bg-blue-900 dark:bg-grey-900 transition-all duration-150',
                 isWinning && 'ring-2 ring-brand',
-                canClick(col) && 'cursor-pointer hover:bg-blue-900 dark:hover:bg-grey-800',
+                canClick(col) && 'cursor-pointer hover:bg-blue-800 dark:hover:bg-grey-800',
                 !canClick(col) && 'cursor-default'
               )}
               aria-label={

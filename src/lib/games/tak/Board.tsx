@@ -238,7 +238,7 @@ export function TakBoard({
       {/* Board grid */}
       <div className="relative">
         <div
-          className="grid gap-1 w-fit mx-auto bg-amber-900/40 dark:bg-amber-950/60 p-2 rounded-xl"
+          className="grid gap-1.5 w-fit mx-auto bg-amber-800 dark:bg-amber-950/80 p-2.5 rounded-xl border border-amber-700 dark:border-amber-900"
           style={{ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}
         >
           {board.map((row, r) =>
@@ -261,10 +261,10 @@ export function TakBoard({
                   disabled={!clickable && !isSelected}
                   className={cn(
                     'w-14 h-14 md:w-16 md:h-16 flex flex-col items-center justify-center relative',
-                    'bg-amber-100 dark:bg-amber-900/50 rounded-md transition-all',
+                    'bg-amber-200 dark:bg-amber-800/70 rounded-md transition-all border border-amber-300 dark:border-amber-700/50',
                     isRoad && 'ring-2 ring-yellow-400 bg-yellow-100 dark:bg-yellow-900/40',
                     isSelected && 'ring-2 ring-accent bg-accent/10',
-                    clickable && 'cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-800/60',
+                    clickable && 'cursor-pointer hover:bg-amber-300 dark:hover:bg-amber-700/70',
                     !clickable && !isSelected && 'cursor-default',
                   )}
                   whileTap={clickable ? { scale: 0.95 } : undefined}

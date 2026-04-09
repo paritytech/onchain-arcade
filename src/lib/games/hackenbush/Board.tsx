@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { HackenbushEdge, HackenbushNode } from '@/types/derived-game'
 
@@ -11,17 +12,17 @@ interface HackenbushBoardProps {
   onRemoveEdge: (edgeId: number) => void
 }
 
-const SVG_WIDTH = 300
-const SVG_HEIGHT = 400
-const GROUND_Y = 380
-const NODE_RADIUS = 5
+const SVG_WIDTH = 440
+const SVG_HEIGHT = 500
+const GROUND_Y = 470
+const NODE_RADIUS = 6
 
 function scaleX(x: number): number {
-  return (x / 100) * (SVG_WIDTH - 40) + 20
+  return (x / 100) * (SVG_WIDTH - 60) + 30
 }
 
 function scaleY(y: number): number {
-  return (y / 100) * (SVG_HEIGHT - 60) + 20
+  return (y / 100) * (SVG_HEIGHT - 80) + 20
 }
 
 export function HackenbushBoard({
@@ -35,13 +36,14 @@ export function HackenbushBoard({
 }: HackenbushBoardProps) {
   const canInteract = isMyTurn && isPlayable
   const myColor = currentTurn === 'X' ? 'R' : 'B'
+  const [hoveredEdge, setHoveredEdge] = useState<number | null>(null)
 
   const nodeMap = new Map(nodes.map(n => [n.id, n]))
 
   const getEdgeColor = (edge: HackenbushEdge, hovered: boolean): string => {
-    if (!edge.alive) return '#6b7280' // gray-500
-    if (edge.color === 'R') return hovered ? '#f87171' : '#ef4444' // red-400 / red-500
-    return hovered ? '#60a5fa' : '#3b82f6' // blue-400 / blue-500
+    if (!edge.alive) return '#9ca3af' // gray-400
+    if (edge.color === 'R') return hovered ? '#dc2626' : '#b91c1c' // red-600 / red-700
+    return hovered ? '#2563eb' : '#1d4ed8' // blue-600 / blue-700
   }
 
   const getEdgeOpacity = (edge: HackenbushEdge): number => {
@@ -62,7 +64,7 @@ export function HackenbushBoard({
 
       <svg
         viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
-        className="w-full max-w-[360px] aspect-[3/4] bg-surface rounded-lg border border-border"
+        className="w-full max-w-[480px] aspect-[44/50] bg-surface rounded-lg border border-border"
         role="img"
         aria-label="Hackenbush game board"
       >
@@ -72,14 +74,13 @@ export function HackenbushBoard({
           y1={GROUND_Y}
           x2={SVG_WIDTH - 10}
           y2={GROUND_Y}
-          stroke="#92400e"
+          className="stroke-amber-800 dark:stroke-amber-600"
           strokeWidth={4}
           strokeLinecap="round"
-          className="dark:stroke-amber-700"
         />
         {/* Ground hash marks */}
-        {Array.from({ length: 12 }, (_, i) => {
-          const x = 15 + i * ((SVG_WIDTH - 30) / 11)
+        {Array.from({ length: 14 }, (_, i) => {
+          const x = 15 + i * ((SVG_WIDTH - 30) / 13)
           return (
             <line
               key={`hash-${i}`}
@@ -87,9 +88,33 @@ export function HackenbushBoard({
               y1={GROUND_Y}
               x2={x - 6}
               y2={GROUND_Y + 10}
-              stroke="#92400e"
+              className="stroke-amber-800 dark:stroke-amber-600"
               strokeWidth={2}
-              className="dark:stroke-amber-700"
+            />
+          )
+        })}
+
+        {/* Invisible wider hit areas for edge clicking */}
+        {edges.map(edge => {
+          const fromNode = nodeMap.get(edge.from)
+          const toNode = nodeMap.get(edge.to)
+          if (!fromNode || !toNode) return null
+          const clickable = isClickable(edge)
+          if (!clickable) return null
+
+          return (
+            <line
+              key={`hit-${edge.id}`}
+              x1={scaleX(fromNode.x)}
+              y1={scaleY(fromNode.y)}
+              x2={scaleX(toNode.x)}
+              y2={scaleY(toNode.y)}
+              stroke="transparent"
+              strokeWidth={16}
+              className="cursor-pointer"
+              onClick={() => onRemoveEdge(edge.id)}
+              onMouseEnter={() => setHoveredEdge(edge.id)}
+              onMouseLeave={() => setHoveredEdge(null)}
             />
           )
         })}
@@ -106,7 +131,9 @@ export function HackenbushBoard({
             const x2 = scaleX(toNode.x)
             const y2 = scaleY(toNode.y)
             const clickable = isClickable(edge)
+            const hovered = hoveredEdge === edge.id
 
+            const color = getEdgeColor(edge, hovered && clickable)
             return (
               <motion.line
                 key={`edge-${edge.id}`}
@@ -114,25 +141,21 @@ export function HackenbushBoard({
                 y1={y1}
                 x2={x2}
                 y2={y2}
-                stroke={getEdgeColor(edge, false)}
-                strokeWidth={clickable ? 5 : 3.5}
+                strokeWidth={hovered && clickable ? 8 : clickable ? 6 : 4.5}
                 strokeLinecap="round"
-                opacity={getEdgeOpacity(edge)}
                 initial={{ opacity: 1 }}
                 animate={{ opacity: getEdgeOpacity(edge) }}
                 exit={{ opacity: 0, strokeWidth: 0 }}
                 transition={{ duration: 0.4 }}
                 onClick={clickable ? () => onRemoveEdge(edge.id) : undefined}
+                onMouseEnter={clickable ? () => setHoveredEdge(edge.id) : undefined}
+                onMouseLeave={clickable ? () => setHoveredEdge(null) : undefined}
                 className={clickable ? 'cursor-pointer' : ''}
-                style={clickable ? { filter: 'url(#glow)' } : undefined}
-              >
-                {clickable && (
-                  <set attributeName="stroke-width" to="7" begin="mouseover" />
-                )}
-                {clickable && (
-                  <set attributeName="stroke-width" to="5" begin="mouseout" />
-                )}
-              </motion.line>
+                style={{
+                  stroke: color,
+                  ...(clickable ? { filter: 'url(#glow)' } : {}),
+                }}
+              />
             )
           })}
         </AnimatePresence>
@@ -151,10 +174,10 @@ export function HackenbushBoard({
               cx={scaleX(node.x)}
               cy={scaleY(node.y)}
               r={isGround ? NODE_RADIUS + 2 : NODE_RADIUS}
-              fill={isGround ? '#92400e' : '#e5e7eb'}
-              stroke={isGround ? '#78350f' : '#9ca3af'}
+              className={isGround
+                ? 'fill-amber-700 stroke-amber-800 dark:fill-amber-600 dark:stroke-amber-700'
+                : 'fill-gray-300 stroke-gray-400 dark:fill-gray-500 dark:stroke-gray-600'}
               strokeWidth={1.5}
-              className={isGround ? 'dark:fill-amber-700 dark:stroke-amber-800' : 'dark:fill-gray-500 dark:stroke-gray-600'}
             />
           )
         })}
@@ -170,10 +193,9 @@ export function HackenbushBoard({
               y1={scaleY(node.y)}
               x2={scaleX(node.x)}
               y2={GROUND_Y}
-              stroke="#92400e"
-              strokeWidth={2}
-              strokeDasharray="4 3"
-              className="dark:stroke-amber-700"
+              className="stroke-amber-800 dark:stroke-amber-600"
+              strokeWidth={3}
+              strokeDasharray="6 4"
             />
           )
         })}

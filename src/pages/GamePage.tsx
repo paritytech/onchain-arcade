@@ -31,7 +31,7 @@ export function GamePage() {
   const gameId = searchParams.get('game')
   const hostAddress = searchParams.get('host')
   const gameTypeParam = searchParams.get('type') as import('@/types/game').GameType | null
-  const { isConnected, address } = usePolkadotWallet()
+  const { address } = usePolkadotWallet()
   const { activeGame, loadGame, makeMove, createGame, joinGame, leaveGame, isLoading } = useGame()
   const { addNotification } = useNotifications()
   const [gameNotFound, setGameNotFound] = useState(false)
@@ -49,7 +49,7 @@ export function GamePage() {
   useEffect(() => {
     if (gameId && !activeGame && !autoJoinAttempted) {
       const timer = setTimeout(async () => {
-        if (!activeGame && hostAddress && isConnected) {
+        if (!activeGame && hostAddress && address) {
           setAutoJoinAttempted(true)
           await joinGame(gameId, hostAddress, gameTypeParam || undefined)
         } else if (!activeGame) {
@@ -59,7 +59,7 @@ export function GamePage() {
       return () => clearTimeout(timer)
     }
     if (activeGame) setGameNotFound(false)
-  }, [gameId, activeGame, hostAddress, isConnected, autoJoinAttempted, joinGame])
+  }, [gameId, activeGame, hostAddress, address, autoJoinAttempted, joinGame])
 
   const handleJoinGame = async () => {
     if (!gameId) return
@@ -368,7 +368,7 @@ export function GamePage() {
       </motion.div>
 
       {/* Join banner for spectators — prominent placement before the board */}
-      {activeGame.status === 'waiting' && !playerRole && isConnected && (
+      {activeGame.status === 'waiting' && !playerRole && address && (
         <motion.div variants={staggerItem}>
           <div className="p-px rounded-2xl bg-gradient-to-br from-brand/50 via-brand/20 to-border">
             <div className="bg-surface rounded-[15px] p-5 flex items-center justify-between gap-4">
