@@ -22,7 +22,7 @@
     "react-router-dom": "^7.1.0",
     "tailwind-merge": "^2.6.0",
     "viem": "^2.21.0",
-    "ws": "^8.18.0"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
