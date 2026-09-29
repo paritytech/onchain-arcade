@@ -4,8 +4,28 @@ import { useState, useCallback, useMemo } from 'react';
 import { encodeFunctionData, decodeFunctionResult } from 'viem';
 import type { Abi, Hex } from 'viem';
 import { Binary } from 'polkadot-api';
-import { getPAPIClient, isAccountMapped } from '../lib/papi/client';
+import { getPAPIClient, isAccountMapped, isPAPIClientReady } from '../lib/papi/client';
 import { usePolkadotWallet } from '../contexts/WalletContext';
+
+/**
+ * The chain client, or an error a player can act on.
+ *
+ * `getPAPIClient()` throws "not initialized", which reads as a programming
+ * mistake. Since the host migration, "there is no client" is a legitimate
+ * runtime state rather than a bug: inside a host container that does not serve
+ * the configured chain, `getHostProvider` yields nothing and the app runs on
+ * fine without chain reads (game state lives in the Statement Store). Contract
+ * calls are the one thing that genuinely cannot proceed, so they say so.
+ */
+function requireChain() {
+  if (!isPAPIClientReady()) {
+    throw new Error(
+      'No chain connection. This host does not serve the configured chain, so ' +
+        'on-chain actions are unavailable — game play is unaffected.',
+    );
+  }
+  return getPAPIClient();
+}
 
 // Normalize H160 to lowercase with 0x prefix
 function normalizeH160(address: string): string {
@@ -28,7 +48,7 @@ async function toH160(addressInput: string): Promise<string> {
   const cached = h160Cache.get(trimmed);
   if (cached) return cached;
 
-  const { api } = getPAPIClient();
+  const { api } = requireChain();
   const result = await api.apis.ReviveApi.address(trimmed);
   let h160: string;
   if (result && typeof result.asHex === 'function') {
@@ -73,7 +93,7 @@ export function useContractPAPI(contractAbi: Abi, contractAddress: string) {
   const readContract = useCallback(async (functionName: string, args: any[] = []): Promise<any> => {
     if (!address) throw new Error('Wallet not connected');
 
-    const { api } = getPAPIClient();
+    const { api } = requireChain();
     const data = encodeFunctionData({ abi: contractAbi, functionName, args }) as Hex;
 
     const result = await api.apis.ReviveApi.call(
@@ -143,7 +163,7 @@ export function useContractPAPI(contractAbi: Abi, contractAddress: string) {
     const signer = getSigner();
     if (!signer) throw new Error('Signer not available');
 
-    const { api } = getPAPIClient();
+    const { api } = requireChain();
 
     // Check account mapping BEFORE the transaction
     const needsMapping = !(await isAccountMapped(address));
