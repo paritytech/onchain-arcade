@@ -56,7 +56,7 @@ function useStatementStoreGames(): DerivedGame[] {
 }
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
-  const { address, productAccountId, displayName } = usePolkadotWallet()
+  const { address, mode, hostSigningReady, displayName } = usePolkadotWallet()
   const { addNotification } = useNotifications()
   const games = useStatementStoreGames()
   const [activeGameId, setActiveGameId] = useState<string | null>(null)
@@ -93,7 +93,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     setIsLoading(true)
     try {
-      statementStore.connectRpc(productAccountId)
+      statementStore.connectRpc(mode, hostSigningReady)
 
       const gameId = generateGameId()
       const stmt: GameStatement = {
@@ -134,7 +134,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [address, productAccountId, displayName, addNotification])
+  }, [address, mode, hostSigningReady, displayName, addNotification])
 
   const joinGame = useCallback(async (gameId: string, hostAddress?: string, gameType?: GameType): Promise<boolean> => {
     if (!address) {
@@ -144,7 +144,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     setIsLoading(true)
     try {
-      statementStore.connectRpc(productAccountId)
+      statementStore.connectRpc(mode, hostSigningReady)
 
       const normalizedId = gameId.trim().toUpperCase()
       let game = statementStore.getGame(normalizedId)
@@ -197,7 +197,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [address, productAccountId, displayName, addNotification])
+  }, [address, mode, hostSigningReady, displayName, addNotification])
 
   const makeMove = useCallback(async (gameId: string, move: MovePayload): Promise<boolean> => {
     if (!address) return false
@@ -257,8 +257,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const normalizedId = gameId.toUpperCase()
     setActiveGameId(normalizedId)
     prevMoveCountRef.current = statementStore.getGame(normalizedId)?.moveCount ?? 0
-    statementStore.connectRpc(productAccountId)
-  }, [productAccountId])
+    statementStore.connectRpc(mode, hostSigningReady)
+  }, [mode, hostSigningReady])
 
   const leaveGame = useCallback(() => {
     setActiveGameId(null)

@@ -6,27 +6,32 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "relay": "node server/relay.js"
   },
   "dependencies": {
-    "@novasamatech/product-sdk": "^0.6.15",
-    "@polkadot-api/sdk-ink": "^0.5.0",
+    "@parity/product-sdk": "0.29.0",
+    "@polkadot-api/sdk-ink": "^0.7.0",
+    "@polkadot-api/substrate-bindings": "^0.20.3",
+    "@polkadot/keyring": "^14.0.3",
+    "@polkadot/util-crypto": "^14.0.3",
     "@talismn/connect-wallets": "^1.2.0",
     "clsx": "^2.1.1",
     "framer-motion": "^11.15.0",
     "lucide-react": "^0.460.0",
-    "polkadot-api": "^1.8.0",
+    "polkadot-api": "^2.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.1.0",
     "tailwind-merge": "^2.6.0",
-    "viem": "^2.21.0",
+    "viem": "^2.52.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
@@ -34,5 +39,10 @@
     "typescript": "^5.9.3",
     "vite": "^6.4.1",
     "vitest": "^3.2.4"
+  },
+  "_comment_overrides": "Pin @parity/truapi to ONE version across the tree. @parity/product-sdk-host depends on it; without this override a transitive route can pull a second copy, producing TWO transport singletons whose handshakes never see each other. truapi carries the SCALE codecs, so a skew means the host decodes a message of the wrong shape and dies with 'Offset is outside the bounds of the DataView'. Keep this EQUAL to the version @parity/product-sdk-host depends on (0.17.0 for product-sdk 0.29.0, whose host is 0.21.0) \u2014 track the host's declared range, not the registry's latest. Matches ../spotlight-mesh.",
+  "overrides": {
+    "@polkadot-api/json-rpc-provider": "^0.2.0",
+    "@parity/truapi": "0.17.0"
   }
 }

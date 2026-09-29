@@ -1,9 +1,8 @@
 /**
- * Triangle Product SDK utilities.
- * Re-exports all triangle integration helpers.
+ * Polkadot host (Triangle) integration helpers.
  */
-export { isInTriangleHost } from './hostDetection';
-export { WELL_KNOWN_CHAINS } from './constants';
+export { isInTriangleHost, isInHostContainer } from './hostDetection';
+export { WELL_KNOWN_CHAINS, ASSET_HUB_GENESIS, DOTNS_SUFFIX } from './constants';
 export type { ChainId } from './constants';
 export type {
   WalletAccount,

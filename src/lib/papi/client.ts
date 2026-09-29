@@ -1,14 +1,32 @@
-// PAPI Client Singleton — survives React re-renders, single connection
-// Always uses direct WebSocket for chain queries (balance, account info).
-// The Triangle host does NOT support Paseo Asset Hub chain queries —
-// it only provides wallet signing + Statement Store access.
-// This matches the ignite repo pattern.
+// PAPI Client Singleton — survives React re-renders, single connection.
+//
+// Chain access is transport-dependent, and this is the file that gets it wrong
+// most expensively:
+//
+//   Host container (Desktop / Mobile / browser shell)
+//     getHostProvider(genesisHash) tunnels every JSON-RPC call through the host
+//     bridge, and the host owns the RPC or light-client connection. A product
+//     must NOT open its own socket here: the desktop host serves the page from
+//     `polkadot://<name>.<tld>`, where the browser rejects a `wss://` socket
+//     outright, so the old always-WebSocket path could never connect on desktop
+//     or mobile.
+//
+//   Standalone browser tab
+//     No host, no bridge — one provider over the configured `wss://` endpoint
+//     list, with PAPI v2's own failover.
+//
+// Chain access is for balances (and the game contract, once one is deployed).
+// Game state does NOT come from here — it lives in the Statement Store. So a
+// chain the host cannot serve degrades to "no balance", never to "no game", and
+// callers are expected to gate on isPAPIClientReady().
 import { createClient, AccountId } from "polkadot-api";
-import { getWsProvider } from "polkadot-api/ws-provider/web";
-import { withPolkadotSdkCompat } from "polkadot-api/polkadot-sdk-compat";
+import { getWsProvider } from "polkadot-api/ws";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
+import { getHostProvider, ChainNotSupportedError } from "@parity/product-sdk/host";
 import { keccak256 } from "viem";
 import { RPC_ENDPOINTS } from "../contracts/config";
+import { ASSET_HUB_GENESIS } from "../triangle/constants";
+import { isInHostContainer } from "../triangle/hostDetection";
 
 let clientInstance: ReturnType<typeof createClient> | null = null;
 let apiInstance: any | null = null;
@@ -17,64 +35,75 @@ let activeEndpoint: string | null = null;
 let initPromise: Promise<void> | null = null;
 let initialized = false;
 
-function createClientForEndpoint(endpoint: string) {
-  const provider = getWsProvider(endpoint);
-  const client = createClient(withPolkadotSdkCompat(provider));
-  const api = client.getUnsafeApi();
-  const inkSdk = createInkSdk(client);
-  return { client, api, inkSdk };
+function install(client: ReturnType<typeof createClient>, endpoint: string) {
+  clientInstance = client;
+  apiInstance = client.getUnsafeApi();
+  inkSdkInstance = createInkSdk(client);
+  activeEndpoint = endpoint;
 }
 
 /**
- * Initialize by racing all WS endpoints in parallel.
- * First endpoint that responds within 8s wins.
+ * Host-routed client. Returns false when there is no provider for this chain,
+ * which is a degraded-but-usable state, not a crash: the caller leaves the
+ * client uninitialized and every read gates on isPAPIClientReady().
  */
-async function initClient(): Promise<void> {
-  // Race all endpoints in parallel — first to respond wins
-  const racePromises = RPC_ENDPOINTS.map(async (endpoint) => {
-    const { client, api, inkSdk } = createClientForEndpoint(endpoint);
-    await Promise.race([
-      api.query.System.Number.getValue(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout")), 8000)
-      ),
-    ]);
-    return { client, api, inkSdk, endpoint };
-  });
-
-  // Promise.any polyfill (target is ES2020) — first to resolve wins
-  const winner = await new Promise<{ client: ReturnType<typeof createClient>; api: any; inkSdk: ReturnType<typeof createInkSdk>; endpoint: string }>((resolve, reject) => {
-    let rejectedCount = 0;
-    const errors: unknown[] = [];
-    racePromises.forEach((p, i) => {
-      p.then(resolve, (err) => {
-        errors[i] = err;
-        if (++rejectedCount === racePromises.length) reject(errors);
-      });
-    });
-  }).catch(() => null);
-
-  if (winner) {
-    clientInstance = winner.client;
-    apiInstance = winner.api;
-    inkSdkInstance = winner.inkSdk;
-    activeEndpoint = winner.endpoint;
-    console.log(`[PAPI] Connected to RPC: ${winner.endpoint}`);
-  } else {
-    console.warn("[PAPI] All endpoints failed, falling back to first endpoint");
-    const fallback = RPC_ENDPOINTS[0];
-    const { client, api, inkSdk } = createClientForEndpoint(fallback);
-    clientInstance = client;
-    apiInstance = api;
-    inkSdkInstance = inkSdk;
-    activeEndpoint = fallback;
+async function initViaHost(): Promise<boolean> {
+  try {
+    // getHostProvider is async and returns null outside a host container; it
+    // THROWS ChainNotSupportedError when the container is reachable but does
+    // not carry this chain (the post-re-genesis case). Both are surfaced rather
+    // than handed on as a provider that silently drops every request.
+    const provider = await getHostProvider(ASSET_HUB_GENESIS);
+    if (!provider) {
+      console.warn("[PAPI] Host container reported no provider — chain reads disabled");
+      return false;
+    }
+    install(createClient(provider), `host:${ASSET_HUB_GENESIS}`);
+    console.log(`[PAPI] Connected over the host bridge (genesis ${ASSET_HUB_GENESIS.slice(0, 10)}…)`);
+    return true;
+  } catch (err) {
+    if (err instanceof ChainNotSupportedError) {
+      // Testnets get re-genesised. Name the fix rather than the symptom: the
+      // app keeps working, it just cannot show a balance.
+      console.error(
+        `[PAPI] The host does not serve chain ${ASSET_HUB_GENESIS}. Balances are ` +
+          "unavailable; game state is unaffected. If this chain was re-genesised, " +
+          "set VITE_CHAIN_GENESIS to the current hash (read it with " +
+          "chainSpec_v1_genesisHash).",
+      );
+      return false;
+    }
+    console.error("[PAPI] Host provider failed:", err);
+    return false;
   }
 }
 
 /**
+ * Standalone client: one provider over the whole endpoint list.
+ *
+ * PAPI v2's `getWsProvider` accepts an array and does failover and reconnect
+ * itself, which replaces the hand-rolled Promise.any race this used to run (and
+ * the `withPolkadotSdkCompat` wrapper, which v2 dropped along with the
+ * `polkadot-api/polkadot-sdk-compat` subpath).
+ */
+function initViaWebSocket(): void {
+  const client = createClient(getWsProvider(RPC_ENDPOINTS));
+  install(client, RPC_ENDPOINTS.join(", "));
+  console.log(`[PAPI] Connected over WebSocket, endpoints: ${RPC_ENDPOINTS.join(", ")}`);
+}
+
+async function initClient(): Promise<void> {
+  if (await isInHostContainer()) {
+    await initViaHost();
+    return;
+  }
+  initViaWebSocket();
+}
+
+/**
  * Initialize the PAPI client. Safe to call multiple times.
- * Always uses direct WebSocket — the Triangle host does not support
- * Paseo Asset Hub for chain queries (only wallet signing + Statement Store).
+ * Only a RESOLVED init is remembered — a failed one leaves the client
+ * uninitialized so a later caller can retry.
  */
 export async function initPAPIClient(): Promise<void> {
   if (clientInstance) return;
@@ -84,14 +113,16 @@ export async function initPAPIClient(): Promise<void> {
 
   try {
     await initPromise;
-    initialized = true;
+    initialized = clientInstance !== null;
   } finally {
     initPromise = null;
   }
 }
 
 /**
- * Returns true if the PAPI client has been initialized.
+ * Returns true if the PAPI client has been initialized. Chain reads MUST gate
+ * on this: inside a host that does not serve the configured chain, there is no
+ * client and that is an expected state.
  */
 export function isPAPIClientReady(): boolean {
   return initialized && clientInstance !== null;
@@ -105,8 +136,8 @@ export async function initChainClient(): Promise<void> {
 }
 
 /**
- * Get the PAPI client singleton.
- * If not yet initialized, creates eagerly with first endpoint.
+ * Get the PAPI client singleton. Throws if called before initPAPIClient()
+ * completes, or when the host serves no provider for this chain.
  */
 export function getPAPIClient(): {
   client: ReturnType<typeof createClient>;
@@ -114,7 +145,7 @@ export function getPAPIClient(): {
   inkSdk: ReturnType<typeof createInkSdk>;
 } {
   if (!clientInstance) {
-    throw new Error('[PAPI] Client not initialized. Call initPAPIClient() first.');
+    throw new Error('[PAPI] Client not initialized. Call initPAPIClient() first and gate reads on isPAPIClientReady().');
   }
   return {
     client: clientInstance,
@@ -124,7 +155,8 @@ export function getPAPIClient(): {
 }
 
 /**
- * Returns the currently active RPC endpoint URL.
+ * Returns the currently active RPC endpoint, or `host:<genesis>` when the
+ * connection is tunnelled through the host bridge.
  */
 export function getActiveEndpoint(): string | null {
   return activeEndpoint;
