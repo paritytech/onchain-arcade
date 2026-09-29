@@ -61,6 +61,21 @@ const ICE_GATHER_TIMEOUT_MS = 4_000
 /** Bound on reaching `connected` once SDP is exchanged. */
 const CONNECT_TIMEOUT_MS = 30_000
 
+/**
+ * How old an invite may be and still ring.
+ *
+ * The Statement Store subscription replays every live matching statement on
+ * connect, and re-runs that backfill on each reconnect. Voice statements are
+ * routed around the game log — which is also what routes them around its
+ * dedupe — so a `voice_invite` from a call that ended without a clean hang-up
+ * re-rings the peer on every page load until the statement expires (5 minutes
+ * on the host transport, 30 seconds on the raw RPC one).
+ *
+ * Generous relative to that window because the two clocks are not
+ * synchronised: this only has to reject a replay, not police latency.
+ */
+const INVITE_MAX_AGE_MS = 120_000
+
 /** Gather ICE fully (or until the bound), then resolve. */
 function waitForIceGathering(pc: RTCPeerConnection, timeoutMs: number): Promise<void> {
   if (pc.iceGatheringState === 'complete') return Promise.resolve()
@@ -94,11 +109,35 @@ export class VoiceSession {
   private destroyed = false
   /** The invite we are currently responding to, so accept() knows the peer key. */
   private pendingInvite: VoiceStatement | null = null
+  /** Statements already acted on, so a subscription backfill cannot re-fire
+   *  them. Bounded by evicting oldest-first — a call is a handful of
+   *  statements, so this never grows meaningfully. */
+  private seen = new Set<string>()
 
   constructor(private readonly opts: VoiceSessionOptions) {}
 
   get state(): VoiceState {
     return this._state
+  }
+
+  /**
+   * Terminal failure: release the device FIRST, then report.
+   *
+   * Every failing path used to call setState('failed', …) directly and return,
+   * which left the microphone open, the OS recording indicator lit and the
+   * RTCPeerConnection alive with its handlers attached — while VoiceBar, seeing
+   * a non-call state, rendered "Talk" again. A user who saw a call fail had no
+   * way to tell they were still being captured.
+   *
+   * The orphaned connection was the second half of it: its
+   * onconnectionstatechange stayed wired to setState, so a failed call could
+   * later overwrite the state of a DIFFERENT call that was carrying audio.
+   * teardownCall() nulls the handlers before closing, so routing every failure
+   * through here fixes both.
+   */
+  private fail(detail: string) {
+    this.teardownCall()
+    this.setState('failed', detail)
   }
 
   private setState(next: VoiceState, detail?: string) {
@@ -169,7 +208,7 @@ export class VoiceSession {
         case 'failed':
           // Distinguished from a hang-up: nothing was agreed, so say so rather
           // than reporting a clean end the player did not ask for.
-          this.setState('failed', 'Could not establish a direct audio connection.')
+          this.fail('Could not establish a direct audio connection.')
           break
         case 'disconnected':
           // May recover on its own — ICE restarts happen. Do not tear down.
@@ -198,7 +237,7 @@ export class VoiceSession {
       await this.opts.publish({ ...this.base('voice_invite'), boxPub: this.boxKey.publicKeyHex } as VoiceStatement)
     } catch (err) {
       this.clearRingTimer()
-      this.setState('failed', err instanceof Error ? err.message : 'Could not send the invite.')
+      this.fail(err instanceof Error ? err.message : 'Could not send the invite.')
     }
   }
 
@@ -219,12 +258,19 @@ export class VoiceSession {
     this.armConnectTimer()
 
     try {
-      this.pc = this.buildPeerConnection()
-      const offer = await this.pc.createOffer()
-      await this.pc.setLocalDescription(offer)
-      await waitForIceGathering(this.pc, ICE_GATHER_TIMEOUT_MS)
+      // Held locally: ICE gathering takes up to ICE_GATHER_TIMEOUT_MS, and the
+      // peer can cancel in that window — handleSignal('voice_end') tears down
+      // and nulls this.pc, so reading this.pc.localDescription afterwards threw
+      // a raw TypeError that surfaced to the player as an error toast reading
+      // "Cannot read properties of null".
+      const pc = this.buildPeerConnection()
+      this.pc = pc
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      await waitForIceGathering(pc, ICE_GATHER_TIMEOUT_MS)
+      if (this.pc !== pc || this.destroyed) return // cancelled while gathering
 
-      const sdp = this.pc.localDescription?.sdp
+      const sdp = pc.localDescription?.sdp
       if (!sdp) throw new Error('No local description after ICE gathering.')
 
       await this.opts.publish({
@@ -242,6 +288,10 @@ export class VoiceSession {
   async decline(): Promise<void> {
     if (this._state !== 'ringing') return
     this.pendingInvite = null
+    // Normally nothing was acquired while ringing — but in the glare case this
+    // side dropped to 'ringing' from its OWN invite and is already holding a
+    // microphone. Declining has to release it.
+    this.teardownCall()
     this.setState('idle')
     try {
       await this.opts.publish(this.base('voice_decline') as VoiceStatement)
@@ -269,6 +319,20 @@ export class VoiceSession {
   async handleSignal(stmt: VoiceStatement): Promise<void> {
     if (this.destroyed) return
 
+    // Drop replays. The transport has no dedupe on this path (game statements
+    // get theirs from the log these deliberately bypass), and it re-delivers
+    // the live set on every reconnect.
+    const key = `${stmt.type}:${stmt.from}:${stmt.timestamp}`
+    if (this.seen.has(key)) return
+    this.seen.add(key)
+    if (this.seen.size > 64) this.seen.delete(this.seen.values().next().value as string)
+
+    // An invite is the only signal that can start a call from idle, so it is
+    // the only one a stale replay can turn into a phantom ring.
+    if (stmt.type === 'voice_invite' && Date.now() - stmt.timestamp > INVITE_MAX_AGE_MS) {
+      return
+    }
+
     switch (stmt.type) {
       case 'voice_invite': {
         // Glare: we both invited. The lower address keeps its invite and
@@ -290,7 +354,7 @@ export class VoiceSession {
         this.clearRingTimer()
         if (!this.boxKey) return
         if (!isSealedSdp(stmt.sealed)) {
-          this.setState('failed', 'The call offer was malformed.')
+          this.fail('The call offer was malformed.')
           return
         }
         this.peerBoxPub = stmt.boxPub
@@ -298,13 +362,16 @@ export class VoiceSession {
         this.armConnectTimer()
         try {
           const offerSdp = await openSdp(this.boxKey, stmt.sealed)
-          this.pc = this.buildPeerConnection()
-          await this.pc.setRemoteDescription({ type: 'offer', sdp: offerSdp })
-          const answer = await this.pc.createAnswer()
-          await this.pc.setLocalDescription(answer)
-          await waitForIceGathering(this.pc, ICE_GATHER_TIMEOUT_MS)
+          // Same cancellation window as accept() — see the note there.
+          const pc = this.buildPeerConnection()
+          this.pc = pc
+          await pc.setRemoteDescription({ type: 'offer', sdp: offerSdp })
+          const answer = await pc.createAnswer()
+          await pc.setLocalDescription(answer)
+          await waitForIceGathering(pc, ICE_GATHER_TIMEOUT_MS)
+          if (this.pc !== pc || this.destroyed) return // cancelled while gathering
 
-          const sdp = this.pc.localDescription?.sdp
+          const sdp = pc.localDescription?.sdp
           if (!sdp) throw new Error('No local description after ICE gathering.')
 
           await this.opts.publish({
@@ -323,7 +390,7 @@ export class VoiceSession {
       case 'voice_answer': {
         if (this._state !== 'connecting' || !this.pc || !this.boxKey) return
         if (!isSealedSdp(stmt.sealed)) {
-          this.setState('failed', 'The call answer was malformed.')
+          this.fail('The call answer was malformed.')
           return
         }
         try {
