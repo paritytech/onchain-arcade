@@ -13,14 +13,33 @@ interface ConnectFourBoardProps {
   onColumnClick: (col: number) => void
 }
 
+/**
+ * A disc, distinguished by SHAPE as well as colour: X is solid, O is a ring.
+ *
+ * Colour alone is not enough here and that is measurable, not a matter of
+ * taste. The two player colours are Okabe-Ito, which maximises hue separation
+ * under colour-vision deficiency — but their luminance contrast against each
+ * other is 1.34:1, well under the 3:1 that WCAG 1.4.11 asks for adjacent parts
+ * of a graphic. No pair in the Okabe-Ito set clears both that bar and the bar
+ * against the board itself (yellow/blue manages 3.92:1 between pieces and then
+ * disappears on a light background at 1.27:1). So the shape carries the
+ * identity and the colour reinforces it, which is the rule anyway.
+ */
 function Disc({ value, isWinning }: { value: 'X' | 'O'; isWinning: boolean }) {
-  const color = value === 'X'
-    ? isWinning ? 'bg-player-x/80 shadow-player-x/40' : 'bg-player-x'
-    : isWinning ? 'bg-player-o/80 shadow-player-o/40' : 'bg-player-o'
-
+  const solid = value === 'X'
   return (
     <motion.div
-      className={cn('w-10 h-10 md:w-12 md:h-12 rounded-full', color, isWinning && 'shadow-lg')}
+      className={cn(
+        'w-10 h-10 md:w-12 md:h-12 rounded-full',
+        solid
+          ? 'bg-player-x'
+          // A ring: transparent centre with a thick border, so the two read
+          // apart in greyscale and under every CVD simulation.
+          : 'bg-transparent border-[6px] md:border-[7px] border-player-o',
+        isWinning && 'shadow-lg ring-2 ring-white/70',
+      )}
+      role="img"
+      aria-label={solid ? 'Player X disc' : 'Player O disc'}
       initial={{ y: -200, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
