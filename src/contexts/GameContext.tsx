@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { usePolkadotWallet } from '@/contexts/WalletContext'
 import { useNotifications } from '@/contexts/NotificationProvider'
 import { statementStore, type DerivedGame } from '@/lib/statementStore'
+import { statementStoreHost } from '@/lib/statementStoreHost'
 import type { GameStatement, PlayerSymbol, GameType, GridSize } from '@/types/game'
 import { generateGameId } from '@/types/game'
 
@@ -56,13 +57,32 @@ function useStatementStoreGames(): DerivedGame[] {
 }
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
-  const { address, productAccountId, displayName } = usePolkadotWallet()
+  const { address, mode, hostSigningReady, displayName } = usePolkadotWallet()
   const { addNotification } = useNotifications()
   const games = useStatementStoreGames()
   const [activeGameId, setActiveGameId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   const activeGame = activeGameId ? statementStore.getGame(activeGameId) : null
+
+  // Surface transport failures. Both channels existed but were wired to
+  // nothing, so "the host serves no Statement Store" and "your move was never
+  // published" reached the console and stopped there — the player saw a game
+  // that looked fine and an opponent who never moved.
+  useEffect(() => {
+    statementStoreHost.onFatalError = (err) => addNotification('error', err.message)
+    statementStore.onSubmitError = (_err, stmt) => {
+      const what = stmt.type === 'make_move' ? 'move' : 'game'
+      addNotification(
+        'error',
+        `Your ${what} could not be published, so your opponent will not see it. Check your connection and try again.`,
+      )
+    }
+    return () => {
+      statementStoreHost.onFatalError = undefined
+      statementStore.onSubmitError = undefined
+    }
+  }, [addNotification])
 
   const prevMoveCountRef = React.useRef<number>(0)
   useEffect(() => {
@@ -93,7 +113,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     setIsLoading(true)
     try {
-      statementStore.connectRpc(productAccountId)
+      statementStore.connectRpc(mode, hostSigningReady)
 
       const gameId = generateGameId()
       const stmt: GameStatement = {
@@ -134,7 +154,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [address, productAccountId, displayName, addNotification])
+  }, [address, mode, hostSigningReady, displayName, addNotification])
 
   const joinGame = useCallback(async (gameId: string, hostAddress?: string, gameType?: GameType): Promise<boolean> => {
     if (!address) {
@@ -144,7 +164,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     setIsLoading(true)
     try {
-      statementStore.connectRpc(productAccountId)
+      statementStore.connectRpc(mode, hostSigningReady)
 
       const normalizedId = gameId.trim().toUpperCase()
       let game = statementStore.getGame(normalizedId)
@@ -197,7 +217,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [address, productAccountId, displayName, addNotification])
+  }, [address, mode, hostSigningReady, displayName, addNotification])
 
   const makeMove = useCallback(async (gameId: string, move: MovePayload): Promise<boolean> => {
     if (!address) return false
@@ -257,8 +277,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const normalizedId = gameId.toUpperCase()
     setActiveGameId(normalizedId)
     prevMoveCountRef.current = statementStore.getGame(normalizedId)?.moveCount ?? 0
-    statementStore.connectRpc(productAccountId)
-  }, [productAccountId])
+    statementStore.connectRpc(mode, hostSigningReady)
+  }, [mode, hostSigningReady])
 
   const leaveGame = useCallback(() => {
     setActiveGameId(null)

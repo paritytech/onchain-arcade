@@ -8,7 +8,10 @@ A real-time multiplayer Tic-Tac-Toe dApp on Polkadot Asset Hub (Paseo testnet). 
 
 ## Environment Setup
 
-When starting Node.js projects, always check `.nvmrc` or `engines` field in `package.json` first. Use `nvm use` or the explicit nvm node binary path rather than relying on shell nvm propagation.
+**Node 22** (`.nvmrc`). The `@parity/product-sdk` stack pulls `@noble/*` v2, which
+declares `node >= 20.19`; Node 18 installs with `EBADENGINE` warnings and is not
+supported. Use `nvm use` or the explicit nvm binary path (`~/.nvm/versions/node/v22.*/bin/node`)
+rather than relying on shell nvm propagation.
 
 **Important**: This project's environment has `npm` configured to omit `devDependencies` by default. Always install with `--include=dev`:
 ```bash
@@ -20,8 +23,9 @@ npm install --include=dev
 - **Framework**: React 18 + TypeScript + Vite
 - **Styling**: Tailwind CSS with custom theme tokens
 - **Blockchain**: Polkadot Asset Hub - Paseo testnet
-- **Wallet Integration**: Talisman, SubWallet, Nova Wallet via @talismn/connect-wallets
-- **Chain Client**: PAPI singleton at `src/lib/papi/client.ts` (dual-mode: Triangle host or standalone WebSocket)
+- **Host SDK**: `@parity/product-sdk` 0.29.0 (host 0.21.0, `@parity/truapi` pinned to 0.17.0 — see the `overrides` note in `package.json`). Versions track `../spotlight-mesh`.
+- **Wallet Integration**: host product account (Desktop / Mobile / browser shell); Talisman, SubWallet, Nova via @talismn/connect-wallets in a plain browser tab
+- **Chain Client**: PAPI v2 singleton at `src/lib/papi/client.ts` (dual-mode: `getHostProvider(genesis)` in a host, direct WebSocket standalone)
 - **State Management**: React Context API (useState) — GameContext + WalletContext
 - **Game State**: localStorage + BroadcastChannel for cross-tab sync
 - **Real-Time Updates**: `useOnBlock` hook subscribes to block events (~2s on Asset Hub)
@@ -49,6 +53,13 @@ src/
 │   ├── useOnBlock.ts          # Block event subscription for real-time refresh
 │   └── useContractPAPI.ts     # Base hook for Ink contract interaction
 ├── lib/
+│   ├── deadline.ts            # withDeadline/DEADLINE — bounds every host-bridge call
+│   ├── host/                  # Host-SDK plumbing (host containers only)
+│   │   ├── productIdentifier.ts # DotNS identifier derived from window.location
+│   │   ├── hostError.ts       # Unwraps Domain→V1→variant host error envelopes
+│   │   ├── allocation.ts      # RFC-0010 requestResourceAllocation, outcomes by tag
+│   │   ├── allowance.ts       # StatementStoreAllowance + StatementSubmit grants
+│   │   └── expiry.ts          # (expiry << 32 | sequence) packing + priority floor
 │   ├── papi/client.ts         # PAPI singleton (getPAPIClient, ss58ToH160, disconnectPAPIClient)
 │   ├── contracts/
 │   │   ├── config.ts          # RPC endpoints, contract address from env
@@ -88,16 +99,30 @@ Uses `HashRouter` (react-router-dom v7) for static hosting compatibility.
 - `/leaderboard` → LeaderboardPage
 
 ### Cross-Browser Multiplayer (Statement Store)
-Game state syncs across browsers via the **Substrate Statement Store RPC** (`wss://pop3-testnet.parity-lab.parity.io/people`).
-- **Statement Store**: Each game action (create, join, move) is an immutable statement submitted to the on-chain statement store
-- **Real-time sync**: Clients subscribe via `statement_subscribeStatement` for push-based updates (~RTT latency)
-- **SCALE encoding**: `src/lib/scale.ts` handles encoding/decoding Statement Store fields (topics, data, proof)
-- **Signing**: Statements are signed with the wallet's sr25519 key via `signRaw`
-- **Topics**: App topic = keccak256("ttt-game"), Game topic = keccak256("ttt:{GAMEID}")
-- **Local cache**: localStorage caches statements for offline access; Statement Store is the source of truth
-- **Fallback relay**: `server/relay.js` + `src/lib/gameRelay.ts` available as WebSocket fallback (`npm run relay`)
-- **Share links**: Include `&host=ADDRESS` param so the other browser can bootstrap the game
-- **Without relay**: Games still work within the same browser (localStorage + BroadcastChannel)
+
+Game state syncs across devices through the Substrate Statement Store. Which
+transport carries it depends on where the app is running, and the two must not
+be confused — `statementStore.connectRpc(mode, hostSigningReady)` picks one.
+
+| | Host container (Desktop / Mobile / browser shell) | Standalone browser tab |
+|---|---|---|
+| Module | `statementStoreHost.ts` | `statementStoreRpc.ts` |
+| Transport | `getStatementStore()` over the host bridge | raw WebSocket JSON-RPC |
+| Signing | `createProofAuthorized()` — the host picks its own allowance-bearing account | app's own sr25519 key (`statementSigner.ts`) |
+| Prerequisite | RFC-0010 `StatementStoreAllowance` + `StatementSubmit` permission (`lib/host/allowance.ts`) | none |
+| Wire types | topics/data/proof are **hex strings** | SCALE bytes (`lib/scale.ts`) |
+
+- **Topics**: Blake2-256 of `ttt-game` (app) and `ttt:{GAMEID}` (per game).
+- **Mode comes from the wallet**, never re-derived — `WalletContext` settles it
+  with the SDK's async `isInsideContainer()` handshake. A second synchronous
+  guess can disagree on a framed page with no bridge, which strands the app
+  waiting for a host account that never arrives.
+- **Expiry** is `(unix_secs + ttl) << 32 | sequence`. The sequence word is
+  load-bearing: two statements in the same second otherwise encode identically
+  and the store rejects the second as `channelPriorityTooLow`.
+- **Local cache**: localStorage plus BroadcastChannel for cross-tab sync; the
+  Statement Store is the source of truth.
+- **Share links**: include `&host=ADDRESS` so the other device can bootstrap.
 
 ### Real-Time Updates
 Game state updates are **push-based** via Statement Store subscription (`statement_subscribeStatement`).
@@ -112,8 +137,22 @@ The `statementStore` uses `useSyncExternalStore` for zero-lag React re-renders.
 
 ### Wallet Context API
 ```typescript
-const { isConnected, address, connect, disconnect, selectAccount, getSigner, getSignRaw, getPublicKey } = useWallet();
+const {
+  mode,               // 'detecting' | 'host' | 'standalone'
+  isConnected, address, h160Address, displayName, balance,
+  hostSigningReady,   // host handed over a product account → host statements can sign
+  connect, disconnect, selectAccount,
+  getSigner,          // host: host-routed PolkadotSigner; standalone: pjs signer
+  getSignRaw,         // standalone only — null in host mode
+  getPublicKey,
+} = usePolkadotWallet();
 ```
+
+In host mode the app gets ONE deterministic **product account** per
+`(PRODUCT_IDENTIFIER, 0)`, distinct from the user's main wallet, so
+`selectAccount` is a no-op there. `PRODUCT_IDENTIFIER` is derived from
+`window.location` — if the host refuses with `DomainNotValid`, check the
+identifier and `DOTNS_SUFFIX` logged at startup before anything else.
 
 ### Modal Positioning
 All modals use `fixed inset-0 z-50 flex items-center justify-center`.
@@ -130,7 +169,11 @@ npx tsc --noEmit             # Type check only
 
 ## Environment Variables
 
-See `.env.example`. The app works without a `.env` file — RPC fallbacks and local state are hardcoded as defaults.
+See `.env.example`. The app works without a `.env` file. Two matter for the host
+containers: `VITE_CHAIN_GENESIS` (the chain the host is asked to serve) and
+`VITE_DOTNS_SUFFIX` (the TLD products are bound under — `dot` on dot.li, `paseo`
+on paseo-next-v2). The `VITE_RPC_*` endpoints are the **standalone path only**;
+inside a host the app names its chain by genesis and the host owns the socket.
 
 ## Styling
 
@@ -157,6 +200,14 @@ When debugging, trace ALL code paths that can trigger the behavior:
 
 ## Known Constraints
 
+- **Never open a `wss://` socket from host-mode code.** Polkadot Desktop serves
+  the page from `polkadot://<name>.<tld>`, where the browser rejects the socket
+  outright. Chain access goes through `getHostProvider(genesis)`.
+- `vite.config.ts` pins `base: './'` and `assetsInlineLimit: 0` — absolute asset
+  paths resolve against the shell's root, not the product's, and the host CSP
+  refuses inlined `data:` assets.
+- A chain the host cannot serve degrades to "no balance", never "no game" —
+  gate every chain read on `isPAPIClientReady()`.
 - Lucide icons: Use `aria-label`, NOT `title`
 - Modals: Must use `fixed inset-0` positioning
 - No emojis in UI

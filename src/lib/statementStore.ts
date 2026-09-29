@@ -3,16 +3,19 @@
 // received in real-time via subscription. localStorage serves as a local cache.
 
 import type { GameStatement } from '@/types/game'
-import type { ProductAccountId } from '@novasamatech/product-sdk'
 import { statementStoreRpc } from './statementStoreRpc'
 import { statementStoreHost } from './statementStoreHost'
-import { isInTriangleHost } from './triangle/hostDetection'
 import { deriveGame } from './games'
 
 export type { DerivedGame, DerivedTicTacToe, DerivedConnectFour, DerivedNim } from '@/types/derived-game'
 import type { DerivedGame } from '@/types/derived-game'
 
 type Listener = () => void
+
+/** Mirrors WalletContext's WalletMode — the environment the transport is
+ *  picked from. Declared here rather than imported so this module stays free
+ *  of a React-context dependency. */
+export type StatementTransportMode = 'detecting' | 'host' | 'standalone'
 
 const STORAGE_KEY = 'ttt_statements'
 
@@ -47,6 +50,14 @@ class StatementStore {
   private _snapshotDirty = true
   private _dirtyGameIds = new Set<string>()
 
+  /**
+   * A statement was applied locally but never published. Local state is intact,
+   * so the player's own board stays right — but the opponent will never see the
+   * move, and without a surface that is indistinguishable from a quiet game.
+   * Wired in GameProvider.
+   */
+  onSubmitError?: (error: Error, stmt: GameStatement) => void
+
   constructor() {
     this.statements = loadStatements()
     this.rebuildIndex()
@@ -74,49 +85,78 @@ class StatementStore {
   }
 
   /**
-   * Connect to the Statement Store for real-time updates.
+   * Connect the statement transport for real-time updates.
    *
-   * @param productAccountId — ProductAccountId for host SDK signing. Null for standalone.
+   * @param mode — the wallet's resolved environment. Taken from the caller
+   *   rather than re-derived here: WalletContext settles it with the SDK's
+   *   async `isInsideContainer()` handshake, and a second, synchronous guess in
+   *   this file could disagree with it. A framed page with no working bridge is
+   *   exactly where the two diverge, and the disagreement is unrecoverable —
+   *   the wallet would run standalone (so `hostSigningReady` stays false) while
+   *   this file waited for a host account that is never coming, leaving the
+   *   player with no multiplayer at all and nothing in the log to say why.
+   * @param hostSigningReady — true once the host has handed over a product
+   *   account, i.e. the host transport can actually sign.
    *
-   * If productAccountId is provided → uses SDK transport (statementStoreHost).
-   * If in host mode but no accountId yet → defers connection.
-   * Otherwise (standalone) → uses raw WebSocket RPC (statementStoreRpc).
+   * Inside a Polkadot host container (Desktop, Mobile, browser shell) the host
+   * transport is used: the host owns the chain connection, the RFC-0010
+   * allowance and the signing. The raw WebSocket RPC transport is for
+   * standalone browser mode only, where the app signs with its own key — a
+   * `wss://` socket opened from inside the desktop host is blocked by its
+   * `polkadot://` page scheme, so it must never be the host-mode path.
    *
-   * Supports upgrading from raw RPC to SDK when accountId becomes available.
+   * A host-mode connection is deferred until the product account arrives, and
+   * upgraded from raw RPC if one was already open.
    */
-  connectRpc(productAccountId?: ProductAccountId | null) {
-    // Upgrade: if already connected via raw RPC but now have an accountId, switch to SDK
-    if (this._rpcConnected && !this._useHostTransport && productAccountId) {
-      console.log('[GameStore] Upgrading from raw RPC to host SDK transport...')
+  connectRpc(mode: StatementTransportMode, hostSigningReady = false) {
+    if (mode === 'detecting') return
+
+    const inHost = mode === 'host'
+
+    // Upgrade: already on raw RPC, but now inside a host with a signing account.
+    if (this._rpcConnected && !this._useHostTransport && inHost && hostSigningReady) {
+      console.log('[GameStore] Upgrading from raw RPC to the host transport...')
       statementStoreRpc.disconnect()
       this._rpcConnected = false
     }
 
     if (this._rpcConnected) return
-    this._rpcConnected = true
 
-    const onStatement = (gameStmt: GameStatement, _signer: Uint8Array | null) => {
+    // `_signer` is the chain-verified statement signer and is deliberately
+    // unused — move authorship is trusted from the JSON payload. See the note
+    // on ss58FromProof in statementStoreHost.ts for why enforcing it needs a
+    // real-host experiment first rather than a one-line guess.
+    const onStatement = (gameStmt: GameStatement, _signer: Uint8Array | string | null) => {
       const ingested = this.ingestRemote(gameStmt)
       if (ingested) {
         const game = this.getGame(gameStmt.gameId)
-        console.log(`[GameStore] ✓ Ingested remote ${gameStmt.type} for game ${gameStmt.gameId} → status=${game?.status}, players=${game?.playerX?.slice(0,8)}.../${game?.playerO?.slice(0,8) ?? 'none'}...`)
+        console.log(`[GameStore] \u2713 Ingested remote ${gameStmt.type} for game ${gameStmt.gameId} \u2192 status=${game?.status}, players=${game?.playerX?.slice(0,8)}.../${game?.playerO?.slice(0,8) ?? 'none'}...`)
       } else {
-        console.log(`[GameStore] ○ Duplicate ${gameStmt.type} for game ${gameStmt.gameId}, skipped`)
+        console.log(`[GameStore] \u25cb Duplicate ${gameStmt.type} for game ${gameStmt.gameId}, skipped`)
       }
     }
 
-    if (productAccountId) {
-      // Host mode with accountId — use SDK transport
-      console.log('[GameStore] Connecting via host SDK transport...')
+    if (inHost) {
+      // Set BEFORE the defer check, not after. applyAndSubmit picks its
+      // transport from this flag, and leaving it false while deferred routed
+      // host-mode submits into statementStoreRpc — which was never connected,
+      // so `_waitForConnection()` awaited a promise only `_doConnect()` ever
+      // resolves and `makeMove` hung forever with no error and no timeout.
+      // Reachable whenever `address` outlives `hostSigningReady`, which is
+      // exactly what a bridge interrupt produces.
       this._useHostTransport = true
-      statementStoreHost.connect(productAccountId, onStatement)
-    } else if (isInTriangleHost()) {
-      // In host mode but no accountId yet — defer connection
-      console.log('[GameStore] In host mode but no accountId yet — deferring connection')
-      this._rpcConnected = false
+      if (!hostSigningReady) {
+        // No product account yet — GameContext re-runs this once the host
+        // hands one over. Connecting now would attach a store that cannot sign.
+        console.log('[GameStore] In a host container but no product account yet — deferring connection')
+        return
+      }
+      console.log('[GameStore] Connecting via the host transport...')
+      this._rpcConnected = true
+      void statementStoreHost.connect(onStatement)
     } else {
-      // Standalone mode — use raw WebSocket RPC
       console.log('[GameStore] Connecting via raw WebSocket RPC transport (standalone)...')
+      this._rpcConnected = true
       this._useHostTransport = false
       statementStoreRpc.connect(onStatement)
     }
@@ -262,7 +302,9 @@ class StatementStore {
         await statementStoreRpc.submit(stmt)
       }
     } catch (err) {
-      console.warn(`[GameStore] ✗ Submit failed for ${stmt.type} (local state preserved):`, err)
+      const error = err instanceof Error ? err : new Error(String(err))
+      console.warn(`[GameStore] ✗ Submit failed for ${stmt.type} (local state preserved):`, error)
+      this.onSubmitError?.(error, stmt)
     }
 
     return this.getGame(stmt.gameId)
