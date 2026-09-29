@@ -1,160 +1,169 @@
 // The 1-to-1 voice control for an active match.
 //
-// Deliberately one compact row rather than a panel: the board is what the
-// player came for, and a call widget that competes with it for attention is a
-// call widget people turn off. Everything is one tap — invite, accept, mute,
-// hang up — and the only text that ever appears is a failure the player can
-// act on.
-import { AnimatePresence, motion } from 'framer-motion'
-import { Mic, MicOff, Phone, PhoneOff, PhoneIncoming, Loader2 } from 'lucide-react'
+// Shape follows the research rather than instinct:
+//  - The control RECEDES; the speaking state attaches to the person. Roblox
+//    developers complain their mic bubble "appears always above the character
+//    regardless of whether the user intends to use it" — so this is one pill,
+//    not a panel, and the level rings live on the player cards.
+//  - Nothing touches getUserMedia until the primer is answered. A permission
+//    prompt with no stated reason is granted ~12% of the time; one that follows
+//    an interaction ~30%, and an explicit reason raises it further.
+//  - A denied microphone gets recovery instructions, never another prompt —
+//    re-calling getUserMedia when the state is 'denied' shows nothing at all.
+//  - Mute-opponent and block are present from v1. Report is not: there is no
+//    moderation backend, and a report button that goes nowhere implies a review
+//    that will never happen.
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import {
+  Mic, MicOff, Phone, PhoneOff, PhoneIncoming, Loader2,
+  Volume2, VolumeX, ShieldBan, AlertTriangle,
+} from 'lucide-react'
 
 import { useVoice } from '@/contexts/VoiceContext'
 import { cn } from '@/lib/cn'
 
-/** Level at which we call someone "speaking". Above the noise floor of a
- *  typical laptop mic, below a normal speaking voice. */
-const SPEAKING_THRESHOLD = 0.08
+/** Minimum touch target. WCAG 2.2 SC 2.5.8 asks 24px; Apple HIG 44pt and
+ *  Material 48dp are the practical floors for a thumb. */
+const TAP = 'min-h-[44px] min-w-[44px]'
 
-function LevelDot({ level, active }: { level: number; active: boolean }) {
-  const speaking = active && level > SPEAKING_THRESHOLD
-  return (
-    <span
-      className={cn(
-        'inline-block w-2 h-2 rounded-full transition-colors',
-        speaking ? 'bg-success' : active ? 'bg-grey-400' : 'bg-grey-600',
-      )}
-      style={speaking ? { transform: `scale(${1 + Math.min(level, 0.5)})` } : undefined}
-      aria-hidden="true"
-    />
-  )
-}
+const pill =
+  'px-3 py-2 rounded-lg border border-border text-body-sm text-text ' +
+  'flex items-center gap-1.5 transition-colors hover:bg-grey-800/40 ' + TAP
 
 export function VoiceBar() {
-  const {
-    available, state, detail, muted, localLevel, remoteLevel,
-    invite, accept, decline, hangUp, toggleMute,
-  } = useVoice()
+  const v = useVoice()
+  const reduceMotion = useReducedMotion()
 
-  // No opponent, or playing the computer — nothing to call.
-  if (!available) return null
+  if (!v.available) return null
 
-  const inCall = state === 'connected' || state === 'connecting'
+  const anim = reduceMotion
+    ? {}
+    : { initial: { opacity: 0, y: -4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4 } }
+
+  // A permanently-denied mic cannot be re-prompted. Name the fix instead.
+  if (v.micPermission === 'denied') {
+    return (
+      <div className="flex items-center gap-2 text-caption text-warning max-w-xs">
+        <AlertTriangle className="w-4 h-4 shrink-0" aria-label="Microphone blocked" />
+        <span>
+          Microphone blocked. Allow it in your browser’s site settings, then reload.
+        </span>
+      </div>
+    )
+  }
+
+  const inCall = v.state === 'connected' || v.state === 'connecting'
 
   return (
-    <div className="flex items-center gap-3 flex-wrap">
+    <div className="flex items-center gap-2 flex-wrap justify-end">
+      {/* Autoplay refused: this tap is the gesture that starts playback. */}
+      {v.remoteBlocked && (
+        <button onClick={v.resumeRemote} className={cn(pill, 'border-warning text-warning')}>
+          <Volume2 className="w-4 h-4" aria-label="Enable sound" />
+          Tap to hear
+        </button>
+      )}
+
       <AnimatePresence mode="wait" initial={false}>
-        {state === 'ringing' ? (
+        {v.priming ? (
           <motion.div
-            key="ringing"
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            className="flex items-center gap-2"
+            key="primer" {...anim}
+            className="flex flex-col gap-2 p-3 rounded-xl border border-border bg-surface max-w-xs text-left"
           >
-            <span className="flex items-center gap-2 text-body-sm text-text">
-              <PhoneIncoming className="w-4 h-4 animate-pulse" aria-label="Incoming call" />
-              Opponent wants to talk
+            <p className="text-body-sm text-text">
+              Talk to your opponent while you play. Only they can hear you, and
+              the call ends with the match.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={v.confirmEnable}
+                className={cn('px-3 py-2 rounded-lg bg-accent text-white text-body-sm font-medium', TAP)}
+              >
+                Enable microphone
+              </button>
+              <button onClick={v.cancelPriming} className={pill}>Not now</button>
+            </div>
+          </motion.div>
+        ) : v.state === 'ringing' ? (
+          <motion.div key="ringing" {...anim} className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 text-body-sm text-text">
+              <PhoneIncoming className="w-4 h-4" aria-label="Incoming call" />
+              Wants to talk
             </span>
             <button
-              onClick={accept}
-              className="px-3 py-1.5 rounded-lg bg-success text-white text-body-sm font-medium min-h-[36px]"
+              onClick={v.accept}
+              className={cn('px-3 py-2 rounded-lg bg-success text-white text-body-sm font-medium', TAP)}
             >
               Accept
             </button>
-            <button
-              onClick={decline}
-              className="px-3 py-1.5 rounded-lg border border-border text-text text-body-sm min-h-[36px]"
-            >
-              Decline
-            </button>
+            <button onClick={v.decline} className={pill}>Decline</button>
           </motion.div>
         ) : inCall ? (
-          <motion.div
-            key="incall"
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            className="flex items-center gap-3"
-          >
-            <span className="flex items-center gap-2 text-body-sm text-grey-400">
-              {state === 'connecting' ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" aria-label="Connecting" />
-                  Connecting…
-                </>
-              ) : (
-                <>
-                  <LevelDot level={localLevel} active={!muted} />
-                  <LevelDot level={remoteLevel} active />
-                  Voice on
-                </>
-              )}
-            </span>
+          <motion.div key="incall" {...anim} className="flex items-center gap-2">
+            {v.state === 'connecting' && (
+              <span className="flex items-center gap-1.5 text-body-sm text-grey-400">
+                <Loader2 className={cn('w-4 h-4', !reduceMotion && 'animate-spin')} aria-label="Connecting" />
+                Connecting…
+              </span>
+            )}
 
             <button
-              onClick={toggleMute}
-              disabled={state !== 'connected'}
-              aria-pressed={muted}
-              className={cn(
-                'px-3 py-1.5 rounded-lg border text-body-sm min-h-[36px] flex items-center gap-1.5',
-                muted
-                  ? 'border-warning text-warning'
-                  : 'border-border text-text',
-              )}
+              onClick={v.toggleMute}
+              disabled={v.state !== 'connected'}
+              aria-pressed={v.muted}
+              className={cn(pill, v.muted && 'border-warning text-warning')}
             >
-              {muted
-                ? <MicOff className="w-4 h-4" aria-label="Unmute" />
-                : <Mic className="w-4 h-4" aria-label="Mute" />}
-              {muted ? 'Muted' : 'Mute'}
+              {v.muted
+                ? <MicOff className="w-4 h-4" aria-label="Unmute yourself" />
+                : <Mic className="w-4 h-4" aria-label="Mute yourself" />}
+              <span className="hidden sm:inline">{v.muted ? 'Muted' : 'Mute'}</span>
+            </button>
+
+            {/* Silence them for us only. They are not told. */}
+            <button
+              onClick={v.togglePeerMute}
+              aria-pressed={v.peerMuted}
+              className={cn(pill, v.peerMuted && 'border-warning text-warning')}
+            >
+              {v.peerMuted
+                ? <VolumeX className="w-4 h-4" aria-label="Unmute opponent" />
+                : <Volume2 className="w-4 h-4" aria-label="Mute opponent" />}
             </button>
 
             <button
-              onClick={hangUp}
-              className="px-3 py-1.5 rounded-lg bg-error text-white text-body-sm font-medium min-h-[36px] flex items-center gap-1.5"
+              onClick={v.blockPeer}
+              className={cn(pill, 'border-error/40 text-error')}
+              title="Block this player from calling you again"
             >
-              <PhoneOff className="w-4 h-4" aria-label="Hang up" />
-              End
+              <ShieldBan className="w-4 h-4" aria-label="Block this player" />
+            </button>
+
+            <button
+              onClick={v.hangUp}
+              className={cn('px-3 py-2 rounded-lg bg-error text-white text-body-sm font-medium flex items-center gap-1.5', TAP)}
+            >
+              <PhoneOff className="w-4 h-4" aria-label="End call" />
+              <span className="hidden sm:inline">End</span>
             </button>
           </motion.div>
-        ) : state === 'inviting' ? (
-          <motion.div
-            key="inviting"
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            className="flex items-center gap-3"
-          >
-            <span className="flex items-center gap-2 text-body-sm text-grey-400">
-              <Loader2 className="w-4 h-4 animate-spin" aria-label="Ringing" />
+        ) : v.state === 'inviting' ? (
+          <motion.div key="inviting" {...anim} className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 text-body-sm text-grey-400">
+              <Loader2 className={cn('w-4 h-4', !reduceMotion && 'animate-spin')} aria-label="Ringing" />
               Ringing…
             </span>
-            <button
-              onClick={hangUp}
-              className="px-3 py-1.5 rounded-lg border border-border text-text text-body-sm min-h-[36px]"
-            >
-              Cancel
-            </button>
+            <button onClick={v.hangUp} className={pill}>Cancel</button>
           </motion.div>
         ) : (
-          <motion.button
-            key="idle"
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            onClick={invite}
-            className="px-3 py-1.5 rounded-lg border border-border text-text text-body-sm min-h-[36px] flex items-center gap-1.5 hover:bg-grey-800/40 transition-colors"
-          >
+          <motion.button key="idle" {...anim} onClick={v.startVoice} className={pill}>
             <Phone className="w-4 h-4" aria-label="Start voice chat" />
-            Talk
+            <span className="hidden sm:inline">Talk</span>
           </motion.button>
         )}
       </AnimatePresence>
 
-      {/* A failure the player can act on — a blocked mic, a call that would not
-          connect. Shown inline rather than only as a toast, because the toast
-          is gone by the time they look for the reason the button did nothing. */}
-      {(state === 'failed' || state === 'declined') && detail && (
-        <span className="text-caption text-error">{detail}</span>
+      {(v.state === 'failed' || v.state === 'declined') && v.detail && (
+        <span className="text-caption text-error w-full text-right">{v.detail}</span>
       )}
     </div>
   )

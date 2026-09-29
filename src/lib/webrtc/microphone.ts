@@ -15,6 +15,7 @@
 import { requestDevicePermission } from '@parity/product-sdk/host';
 
 import { isInTriangleHost } from '../triangle/hostDetection';
+import { audioContext } from './audioUnlock';
 
 /** The host refused the microphone, so there is nothing to capture. */
 export class MicrophonePermissionError extends Error {
@@ -81,6 +82,28 @@ export async function requestMicrophone(): Promise<MediaStream> {
   }
 }
 
+/**
+ * What the browser currently thinks about microphone access.
+ *
+ * `denied` is the state worth detecting: re-calling getUserMedia there does NOT
+ * re-show the system prompt, so a "Talk" button that keeps failing silently is
+ * the worst outcome. The UI replaces it with recovery instructions instead.
+ * `navigator.permissions` is absent or lacks the microphone name in some
+ * browsers (notably older Safari), which reports as 'unknown'.
+ */
+export type MicPermission = 'granted' | 'denied' | 'prompt' | 'unknown';
+
+export async function micPermissionState(): Promise<MicPermission> {
+  try {
+    const perms = navigator.permissions;
+    if (!perms?.query) return 'unknown';
+    const status = await perms.query({ name: 'microphone' as PermissionName });
+    return status.state as MicPermission;
+  } catch {
+    return 'unknown';
+  }
+}
+
 /** Stop every track on a stream. Forgetting this leaves the OS mic indicator
  *  lit after a call ends, which players reasonably read as being recorded. */
 export function stopStream(stream: MediaStream | null): void {
@@ -99,11 +122,13 @@ export function meterStream(
   stream: MediaStream,
   onLevel: (level: number) => void,
 ): () => void {
-  const AudioCtor: typeof AudioContext | undefined =
-    window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioCtor) return () => {};
+  // The SHARED context, unlocked on the click that started the call. Building
+  // one here instead would create it after `await getUserMedia` — outside the
+  // gesture window — where it is born suspended and its analyser reads silence
+  // forever, with no error to show for it.
+  const ctx = audioContext();
+  if (!ctx) return () => {};
 
-  const ctx = new AudioCtor();
   const source = ctx.createMediaStreamSource(stream);
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 512;
@@ -132,6 +157,7 @@ export function meterStream(
     stopped = true;
     cancelAnimationFrame(raf);
     source.disconnect();
-    void ctx.close().catch(() => {});
+    // Deliberately NOT ctx.close(): the context is shared and closing it here
+    // would silently break every later call's meter.
   };
 }
