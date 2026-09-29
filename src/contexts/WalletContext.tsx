@@ -29,6 +29,7 @@ import { hostErrorTag } from '../lib/host/hostError';
 import { PRODUCT_IDENTIFIER } from '../lib/host/productIdentifier';
 import { DEADLINE, withDeadline, isDeadlineError } from '../lib/deadline';
 import { initStorage, getStorage } from '../lib/storage';
+import { useNotifications } from './NotificationProvider';
 
 const DAPP_NAME = 'onchain-arcade';
 const PAS_DECIMALS = 10;
@@ -148,6 +149,24 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
   const connectionSubRef = useRef<{ unsubscribe: () => void } | null>(null);
 
   const installedWallets = getWallets().filter(w => w.installed);
+  const { addNotification } = useNotifications();
+
+  // `error` had no renderer: WalletModal keeps its own local error state and
+  // never reads the context's, and in host mode the modal auto-closes anyway —
+  // so a host that never hands over an account, or one waiting for sign-in, was
+  // a silently dead app. NotificationProvider wraps WalletProvider (see the
+  // provider order in App.tsx), so this is the surface that always exists.
+  // Each distinct message is announced once; a repeat of the same one is not.
+  const reportedErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!error) {
+      reportedErrorRef.current = null;
+      return;
+    }
+    if (reportedErrorRef.current === error) return;
+    reportedErrorRef.current = error;
+    addNotification('error', error, 10_000);
+  }, [error, addNotification]);
 
   const saveConnectionState = useCallback((walletName: string, address: string) => {
     try {

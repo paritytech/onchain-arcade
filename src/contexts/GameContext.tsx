@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { usePolkadotWallet } from '@/contexts/WalletContext'
 import { useNotifications } from '@/contexts/NotificationProvider'
 import { statementStore, type DerivedGame } from '@/lib/statementStore'
+import { statementStoreHost } from '@/lib/statementStoreHost'
 import type { GameStatement, PlayerSymbol, GameType, GridSize } from '@/types/game'
 import { generateGameId } from '@/types/game'
 
@@ -63,6 +64,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false)
 
   const activeGame = activeGameId ? statementStore.getGame(activeGameId) : null
+
+  // Surface transport failures. Both channels existed but were wired to
+  // nothing, so "the host serves no Statement Store" and "your move was never
+  // published" reached the console and stopped there — the player saw a game
+  // that looked fine and an opponent who never moved.
+  useEffect(() => {
+    statementStoreHost.onFatalError = (err) => addNotification('error', err.message)
+    statementStore.onSubmitError = (_err, stmt) => {
+      const what = stmt.type === 'make_move' ? 'move' : 'game'
+      addNotification(
+        'error',
+        `Your ${what} could not be published, so your opponent will not see it. Check your connection and try again.`,
+      )
+    }
+    return () => {
+      statementStoreHost.onFatalError = undefined
+      statementStore.onSubmitError = undefined
+    }
+  }, [addNotification])
 
   const prevMoveCountRef = React.useRef<number>(0)
   useEffect(() => {

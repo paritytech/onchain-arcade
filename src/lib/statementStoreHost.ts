@@ -99,10 +99,23 @@ class StatementStoreHost {
   private subscription: { unsubscribe: () => void } | null = null
   private disposed = false
   private _connected = false
-  /** Set before the first await in connect(). `_connected` only flips after
-   *  `getStatementStore()` resolves, so without this two calls inside that
-   *  window would both pass the guard and open two subscriptions. */
-  private connecting = false
+  /**
+   * The in-flight (or settled) attach. Resolves to the store, or to null when
+   * there is none to be had.
+   *
+   * `submit()` AWAITS this rather than reading `this.store`, and that is
+   * load-bearing rather than tidy. `statementStore.connectRpc()` selects the
+   * transport synchronously and fires `connect()` without awaiting it, so
+   * `GameContext.createGame` reaches `applyAndSubmit` in the same synchronous
+   * run — provably before `getStatementStore()` has resolved. Reading
+   * `this.store` there found null and threw, `applyAndSubmit` swallowed it, and
+   * the very first create/join of every host-mode session was dropped while the
+   * UI said "Game created". The old SDK's `createStatementStore()` was
+   * synchronous, which is why this could not happen before the migration.
+   *
+   * Doubles as the connect guard: non-null means attaching or attached.
+   */
+  private ready: Promise<HostStatementStore | null> | null = null
   /** One allocator for this client's signing account — every submit draws from
    *  it, so same-second statements cannot tie. */
   private readonly expiry = createExpiryAllocator()
@@ -114,34 +127,38 @@ class StatementStoreHost {
 
   /**
    * Attach to the host statement store and subscribe to the app topic.
+   * Idempotent: concurrent callers share the one in-flight attach.
    *
    * `getStatementStore()` is ASYNC and resolves null outside a host container,
-   * so both failure modes are reported rather than left silent: the caller is
-   * an effect, and a store that never arrives would otherwise look identical to
-   * a quiet game.
+   * so both failure modes are reported rather than left silent — a store that
+   * never arrives would otherwise look identical to a quiet game.
    */
-  async connect(onStatement: StatementCallback): Promise<void> {
-    if (this._connected || this.connecting) return
-    this.connecting = true
+  connect(onStatement: StatementCallback): Promise<void> {
+    if (this.ready) return this.ready.then(() => undefined)
     // Reset the dispose latch: disconnect() sets it to stop in-flight callbacks
     // from the previous session, and leaving it set would make the singleton
     // permanently dead — a disconnect/reconnect cycle (host sign-out then
     // sign-in) would silently never resubscribe.
     this.disposed = false
     this.onStatement = onStatement
+    this.ready = this.attach()
+    return this.ready.then(() => undefined)
+  }
 
+  /** The attach itself. Never rejects: every failure is reported through
+   *  onFatalError and resolves to null, so an awaiting submit gets a clear
+   *  "not connected" rather than an unhandled rejection. */
+  private async attach(): Promise<HostStatementStore | null> {
     let store: HostStatementStore | null
     try {
       store = await getStatementStore()
     } catch (err) {
-      this.connecting = false
       const detail = err instanceof Error ? err.message : String(err)
       console.error('[SS:Host] Statement store unavailable:', detail)
       this.onFatalError?.(new Error(`Statement Store unavailable: ${detail}. Reload to try again.`))
-      return
+      return null
     }
-    this.connecting = false
-    if (this.disposed) return
+    if (this.disposed) return null
     if (!store) {
       console.warn('[SS:Host] No host statement store — not inside a host container')
       this.onFatalError?.(
@@ -150,7 +167,7 @@ class StatementStoreHost {
             'Polkadot Mobile, or the browser host.',
         ),
       )
-      return
+      return null
     }
 
     this.store = store
@@ -160,6 +177,7 @@ class StatementStoreHost {
     // the player makes their first move.
     this.primeGrants()
     console.log('[SS:Host] Connected, subscription active')
+    return store
   }
 
   /** Open the upstream subscription, re-opening it whenever the host
@@ -219,7 +237,13 @@ class StatementStoreHost {
    */
   async submit(gameStmt: GameStatement): Promise<void> {
     if (this.disposed) throw new Error('[SS:Host] Disposed')
-    if (!this.store) throw new Error('[SS:Host] Not connected — call connect() first')
+    // Wait for the attach rather than reading this.store — see the note on
+    // `ready`. The caller routinely arrives before getStatementStore() has
+    // resolved, and failing there drops the first statement of the session.
+    const store = this.ready ? await this.ready : this.store
+    if (!store || this.disposed) {
+      throw new Error('[SS:Host] Not connected — the host served no Statement Store')
+    }
 
     // Kick the grant bootstrap, but never wait for it. requestResourceAllocation
     // can hang until its deadline, and awaiting here would stall the move for
@@ -241,14 +265,14 @@ class StatementStoreHost {
 
       let proof
       try {
-        proof = await this.store.createProofAuthorized(unsigned)
+        proof = await store.createProofAuthorized(unsigned)
       } catch (err) {
         console.error('[SS:Host] ✗ createProofAuthorized failed:', err)
         throw err instanceof Error ? err : new Error(String(err))
       }
 
       try {
-        await this.store.submit({ ...unsigned, proof } satisfies SignedStatement)
+        await store.submit({ ...unsigned, proof } satisfies SignedStatement)
         console.log(`[SS:Host] ✓ Submitted ${gameStmt.type} for ${gameStmt.gameId}`)
         return
       } catch (err) {
@@ -279,9 +303,9 @@ class StatementStoreHost {
     }
     this.subscription = null
     this.store = null
+    this.ready = null
     this.onStatement = null
     this._connected = false
-    this.connecting = false
     console.log('[SS:Host] Disconnected')
   }
 }

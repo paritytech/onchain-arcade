@@ -50,6 +50,14 @@ class StatementStore {
   private _snapshotDirty = true
   private _dirtyGameIds = new Set<string>()
 
+  /**
+   * A statement was applied locally but never published. Local state is intact,
+   * so the player's own board stays right — but the opponent will never see the
+   * move, and without a surface that is indistinguishable from a quiet game.
+   * Wired in GameProvider.
+   */
+  onSubmitError?: (error: Error, stmt: GameStatement) => void
+
   constructor() {
     this.statements = loadStatements()
     this.rebuildIndex()
@@ -283,7 +291,9 @@ class StatementStore {
         await statementStoreRpc.submit(stmt)
       }
     } catch (err) {
-      console.warn(`[GameStore] ✗ Submit failed for ${stmt.type} (local state preserved):`, err)
+      const error = err instanceof Error ? err : new Error(String(err))
+      console.warn(`[GameStore] ✗ Submit failed for ${stmt.type} (local state preserved):`, error)
+      this.onSubmitError?.(error, stmt)
     }
 
     return this.getGame(stmt.gameId)
