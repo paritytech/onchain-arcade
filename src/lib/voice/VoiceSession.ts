@@ -113,6 +113,18 @@ export class VoiceSession {
    *  them. Bounded by evicting oldest-first — a call is a handful of
    *  statements, so this never grows meaningfully. */
   private seen = new Set<string>()
+  /**
+   * Set before the first await in invite()/accept().
+   *
+   * Both guard on `_state`, but only reach their next state AFTER
+   * `await ensureMic()` — and the button stays mounted through the
+   * getUserMedia prompt. Two clicks produced two getUserMedia calls (the first
+   * stream orphaned and never stopped), two peer connections (the first
+   * orphaned and unclosed) and two offers with DIFFERENT box keys. The inviter
+   * answers the first and seals to a key this side has already replaced, so
+   * openSdp fails and the call dies — having opened the microphone twice.
+   */
+  private starting = false
 
   constructor(private readonly opts: VoiceSessionOptions) {}
 
@@ -224,20 +236,27 @@ export class VoiceSession {
   /** Side A: offer to talk. Costs one statement. */
   async invite(): Promise<void> {
     if (this._state !== 'idle' && this._state !== 'declined' && this._state !== 'failed') return
-    if (!(await this.ensureMic())) return
-
-    this.boxKey = generateBoxKey()
-    this.setState('inviting')
-    this.ringTimer = setTimeout(() => {
-      this.setState('failed', 'No answer.')
-      void this.end()
-    }, RING_TIMEOUT_MS)
-
+    if (this.starting) return
+    this.starting = true
     try {
-      await this.opts.publish({ ...this.base('voice_invite'), boxPub: this.boxKey.publicKeyHex } as VoiceStatement)
-    } catch (err) {
-      this.clearRingTimer()
-      this.fail(err instanceof Error ? err.message : 'Could not send the invite.')
+      if (!(await this.ensureMic())) return
+
+      this.boxKey = generateBoxKey()
+      this.setState('inviting')
+      this.ringTimer = setTimeout(() => {
+        // end() tears down, so the mic is released on a no-answer too.
+        this.setState('failed', 'No answer.')
+        void this.end()
+      }, RING_TIMEOUT_MS)
+
+      try {
+        await this.opts.publish({ ...this.base('voice_invite'), boxPub: this.boxKey.publicKeyHex } as VoiceStatement)
+      } catch (err) {
+        this.clearRingTimer()
+        this.fail(err instanceof Error ? err.message : 'Could not send the invite.')
+      }
+    } finally {
+      this.starting = false
     }
   }
 
@@ -250,14 +269,16 @@ export class VoiceSession {
       this.setState('failed', 'The invite carried no key.')
       return
     }
-    if (!(await this.ensureMic())) return
-
-    this.peerBoxPub = peerPub
-    this.boxKey = generateBoxKey()
-    this.setState('connecting')
-    this.armConnectTimer()
-
+    if (this.starting) return
+    this.starting = true
     try {
+      if (!(await this.ensureMic())) return
+
+      this.peerBoxPub = peerPub
+      this.boxKey = generateBoxKey()
+      this.setState('connecting')
+      this.armConnectTimer()
+
       // Held locally: ICE gathering takes up to ICE_GATHER_TIMEOUT_MS, and the
       // peer can cancel in that window — handleSignal('voice_end') tears down
       // and nulls this.pc, so reading this.pc.localDescription afterwards threw
@@ -279,8 +300,9 @@ export class VoiceSession {
         sealed: await sealSdp(this.peerBoxPub, sdp),
       } as VoiceStatement)
     } catch (err) {
-      this.setState('failed', err instanceof Error ? err.message : 'Could not start the call.')
-      await this.end()
+      this.fail(err instanceof Error ? err.message : 'Could not start the call.')
+    } finally {
+      this.starting = false
     }
   }
 

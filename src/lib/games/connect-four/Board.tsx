@@ -77,7 +77,7 @@ export function ConnectFourBoard({ board, currentTurn, winningLine, isMyTurn, is
 
       {/* Board */}
       <div
-        className="grid gap-1.5 md:gap-2 w-fit mx-auto bg-blue-800 dark:bg-blue-900 p-3 md:p-4 rounded-2xl"
+        className="grid gap-1.5 md:gap-2 w-fit mx-auto bg-blue-700 dark:bg-blue-900 p-3 md:p-4 rounded-2xl"
         style={{ gridTemplateColumns: `repeat(${C4_COLS}, minmax(0, 1fr))` }}
       >
         {Array.from({ length: C4_ROWS * C4_COLS }, (_, index) => {
@@ -94,9 +94,13 @@ export function ConnectFourBoard({ board, currentTurn, winningLine, isMyTurn, is
               disabled={!canClick(col)}
               className={cn(
                 'w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center',
-                'bg-blue-900 dark:bg-grey-900 transition-all duration-150',
+                // Neutral, not navy. The holes were blue-900 in light mode,
+                // which was fine against a red disc (2.75:1) and is not against
+                // an Okabe-Ito blue one: 2.00:1, and blue-on-navy by hue too.
+                // grey-900 clears 3:1 against both pieces (3.37 and 4.52).
+                'bg-grey-900 transition-all duration-150',
                 isWinning && 'ring-2 ring-brand',
-                canClick(col) && 'cursor-pointer hover:bg-blue-800 dark:hover:bg-grey-800',
+                canClick(col) && 'cursor-pointer hover:bg-grey-800',
                 !canClick(col) && 'cursor-default'
               )}
               aria-label={

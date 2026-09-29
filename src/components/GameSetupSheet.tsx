@@ -26,7 +26,7 @@ const GRID_OPTIONS: { size: GridSize; label: string }[] = [
 const NIM_PRESETS: { label: string; heaps: number[] }[] = [
   { label: 'Quick', heaps: [1, 2, 3] },
   { label: 'Classic', heaps: [3, 4, 5] },
-  { label: 'Big', heaps: [5, 6, 7] },
+  { label: 'Big', heaps: [3, 5, 7] },
 ]
 
 export interface SetupChoice {
