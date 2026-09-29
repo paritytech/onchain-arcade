@@ -65,7 +65,7 @@ export function MancalaBoard({ pits, lastSowEnd, isMyTurn, isPlayable, isPlayerX
     <div className="space-y-2">
       <div className="flex items-stretch gap-2 justify-center">
         {/* O's Store (left) */}
-        <Store count={pits[13]} label="P2" color="text-blue-400" />
+        <Store count={pits[13]} label="P2" color="text-player-o" />
 
         <div className="flex flex-col gap-2 justify-center">
           {/* O's pits (top row, right to left) */}
@@ -98,7 +98,7 @@ export function MancalaBoard({ pits, lastSowEnd, isMyTurn, isPlayable, isPlayerX
         </div>
 
         {/* X's Store (right) */}
-        <Store count={pits[6]} label="P1" color="text-pink-400" />
+        <Store count={pits[6]} label="P1" color="text-player-x" />
       </div>
 
       <p className="text-caption text-grey-500 text-center">

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { HackenbushEdge, HackenbushNode } from '@/types/derived-game'
+import { PLAYER_X_COLOR, PLAYER_O_COLOR } from '@/lib/games/playerTheme'
 
 interface HackenbushBoardProps {
   edges: HackenbushEdge[]
@@ -42,8 +43,11 @@ export function HackenbushBoard({
 
   const getEdgeColor = (edge: HackenbushEdge, hovered: boolean): string => {
     if (!edge.alive) return '#9ca3af' // gray-400
-    if (edge.color === 'R') return hovered ? '#dc2626' : '#b91c1c' // red-600 / red-700
-    return hovered ? '#2563eb' : '#1d4ed8' // blue-600 / blue-700
+    // Red-Blue Hackenbush names its two sides after colours, but the
+    // rendered pair is Okabe-Ito: the game's semantics are 'the two sides',
+    // and red-vs-blue is exactly the pair that collapses under deuteranopia.
+    if (edge.color === 'R') return hovered ? '#E6873D' : PLAYER_O_COLOR
+    return hovered ? '#3D93C7' : PLAYER_X_COLOR
   }
 
   const getEdgeOpacity = (edge: HackenbushEdge): number => {
@@ -215,11 +219,11 @@ export function HackenbushBoard({
       {/* Legend */}
       <div className="flex gap-6 text-caption text-text-secondary">
         <div className="flex items-center gap-1.5">
-          <span className="inline-block w-4 h-1 rounded bg-red-500" />
+          <span className="inline-block w-4 h-1 rounded bg-player-o" />
           <span>Red (Player X)</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="inline-block w-4 h-1 rounded bg-blue-500" />
+          <span className="inline-block w-4 h-1 rounded bg-player-x" />
           <span>Blue (Player O)</span>
         </div>
       </div>

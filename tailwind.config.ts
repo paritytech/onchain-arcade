@@ -41,6 +41,23 @@ const config: Config = {
           hover: 'var(--color-brand-hover)',
           soft: 'var(--color-brand-soft)',
         },
+        // Player identities — Okabe-Ito, colour-vision-deficiency safe.
+        // Single source of truth is src/lib/games/playerTheme.ts; these tokens
+        // exist so boards can use them in class names. Never write a raw red or
+        // blue for a player: red/blue is the pair that collapses under
+        // deuteranopia, which is what these replaced.
+        'player-x': '#0072B2',
+        'player-o': '#D55E00',
+        // Okabe-Ito palette, for boards whose pieces are a set rather than two
+        // sides. Replaces a red/green/blue/yellow/purple palette whose
+        // red-vs-green pair is the commonest confusion there is.
+        'oi-orange': '#E69F00',
+        'oi-sky': '#56B4E9',
+        'oi-green': '#009E73',
+        'oi-yellow': '#F0E442',
+        'oi-blue': '#0072B2',
+        'oi-vermillion': '#D55E00',
+        'oi-purple': '#CC79A7',
         // Semantic colors
         success: '#059669',
         error: '#dc2626',

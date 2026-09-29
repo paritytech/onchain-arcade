@@ -15,8 +15,8 @@ interface ConnectFourBoardProps {
 
 function Disc({ value, isWinning }: { value: 'X' | 'O'; isWinning: boolean }) {
   const color = value === 'X'
-    ? isWinning ? 'bg-red-400 shadow-red-400/40' : 'bg-red-500'
-    : isWinning ? 'bg-yellow-300 shadow-yellow-300/40' : 'bg-yellow-400'
+    ? isWinning ? 'bg-player-x/80 shadow-player-x/40' : 'bg-player-x'
+    : isWinning ? 'bg-player-o/80 shadow-player-o/40' : 'bg-player-o'
 
   return (
     <motion.div
@@ -45,7 +45,7 @@ export function ConnectFourBoard({ board, currentTurn, winningLine, isMyTurn, is
               <motion.div
                 className={cn(
                   'w-8 h-8 rounded-full opacity-40',
-                  currentTurn === 'X' ? 'bg-red-500' : 'bg-yellow-400'
+                  currentTurn === 'X' ? 'bg-player-x' : 'bg-player-o'
                 )}
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}

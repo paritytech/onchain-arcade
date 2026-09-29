@@ -70,8 +70,8 @@ export function BlokusDuoBoard({
 
   const canAct = isMyTurn && isPlayable
   const myPieces = remainingPieces[currentTurn]
-  const pieceColor = currentTurn === 'X' ? 'bg-rose-500' : 'bg-blue-500'
-  const pieceBoardColor = currentTurn === 'X' ? 'bg-rose-400/40' : 'bg-blue-400/40'
+  const pieceColor = currentTurn === 'X' ? 'bg-player-x' : 'bg-player-o'
+  const pieceBoardColor = currentTurn === 'X' ? 'bg-player-x/40' : 'bg-player-o/40'
 
   // Compute ghost cells for hovered position
   const ghostCells = useMemo(() => {
@@ -126,8 +126,8 @@ export function BlokusDuoBoard({
     <div className="space-y-3">
       {/* Scores */}
       <div className="flex justify-center gap-6 text-body-sm font-semibold">
-        <span className="text-rose-400">X (Pink): {scores.X}</span>
-        <span className="text-blue-400">O (Blue): {scores.O}</span>
+        <span className="text-player-x">X (Blue): {scores.X}</span>
+        <span className="text-player-o">O (Orange): {scores.O}</span>
         {consecutivePasses > 0 && (
           <span className="text-text/60">Passes: {consecutivePasses}/2</span>
         )}
@@ -166,14 +166,14 @@ export function BlokusDuoBoard({
               >
                 {cell === 'X' ? (
                   <motion.div
-                    className="w-[18px] h-[18px] rounded-sm bg-rose-500"
+                    className="w-[18px] h-[18px] rounded-sm bg-player-x"
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ type: 'spring', stiffness: 300, damping: 20 }}
                   />
                 ) : cell === 'O' ? (
                   <motion.div
-                    className="w-[18px] h-[18px] rounded-sm bg-blue-500"
+                    className="w-[18px] h-[18px] rounded-sm bg-player-o"
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ type: 'spring', stiffness: 300, damping: 20 }}
@@ -183,7 +183,7 @@ export function BlokusDuoBoard({
                 ) : (isStartX || isStartO) ? (
                   <div className={cn(
                     'w-[10px] h-[10px] rounded-full opacity-60',
-                    isStartX ? 'bg-rose-400' : 'bg-blue-400',
+                    isStartX ? 'bg-player-x' : 'bg-player-o',
                   )} />
                 ) : null}
               </button>

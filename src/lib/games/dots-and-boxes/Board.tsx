@@ -34,8 +34,8 @@ export function DotsAndBoxesBoard({ lines, boxes, scores, isMyTurn, isPlayable, 
   return (
     <div className="space-y-3">
       <div className="flex justify-center gap-6 text-body-sm font-semibold">
-        <span className="text-pink-400">X: {scores.X}</span>
-        <span className="text-blue-400">O: {scores.O}</span>
+        <span className="text-player-x">X: {scores.X}</span>
+        <span className="text-player-o">O: {scores.O}</span>
       </div>
 
       <div className="relative flex justify-center">
@@ -166,7 +166,7 @@ export function DotsAndBoxesBoard({ lines, boxes, scores, isMyTurn, isPlayable, 
                 x={dotPos(col) + CELL_SIZE / 2}
                 y={dotPos(row) + CELL_SIZE / 2 + 5}
                 textAnchor="middle"
-                className={cn('text-lg font-bold', owner === 'X' ? 'fill-pink-400' : 'fill-blue-400')}
+                className={cn('text-lg font-bold', owner === 'X' ? 'fill-player-x' : 'fill-player-o')}
               >
                 {owner}
               </text>

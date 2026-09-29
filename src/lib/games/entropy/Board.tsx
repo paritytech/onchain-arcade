@@ -4,16 +4,19 @@ import { cn } from '@/lib/cn'
 import type { EntropyColor } from '@/types/derived-game'
 import type { PlayerSymbol } from '@/types/game'
 
+// Okabe-Ito rather than red/green/blue/yellow/purple. The keys keep their
+// original letters (the deriver encodes pieces by them); only the rendered
+// colour and the human label change. Red-vs-green was the worst pair here.
 const COLOR_MAP: Record<EntropyColor, string> = {
-  R: 'bg-red-500',
-  G: 'bg-emerald-500',
-  B: 'bg-blue-500',
-  Y: 'bg-yellow-400',
-  P: 'bg-purple-500',
+  R: 'bg-oi-vermillion',
+  G: 'bg-oi-green',
+  B: 'bg-oi-blue',
+  Y: 'bg-oi-yellow',
+  P: 'bg-oi-purple',
 }
 
 const COLOR_LABEL: Record<EntropyColor, string> = {
-  R: 'Red',
+  R: 'Vermillion',
   G: 'Green',
   B: 'Blue',
   Y: 'Yellow',
