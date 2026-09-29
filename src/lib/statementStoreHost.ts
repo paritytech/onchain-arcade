@@ -70,9 +70,30 @@ const DEFAULT_EXPIRY_SECS = 60 * 5
 
 const accountIdCodec = AccountId()
 
-/** SS58 address of the statement signer, taken from the chain-side proof —
- *  never from any field inside the JSON payload. Null when the proof uses a
- *  shape this build does not know. */
+/**
+ * SS58 address of the statement signer, taken from the chain-side proof rather
+ * than from any field inside the JSON payload.
+ *
+ * NOT CURRENTLY ENFORCED. It is handed to the store's statement handler, which
+ * ignores it: move authorship is trusted from the JSON `player` field alone, so
+ * any participant who can publish to the app topic can publish a move
+ * attributed to their opponent. That is pre-existing behaviour, not something
+ * this transport changed, and it is recorded here rather than silently fixed
+ * because the obvious fix is wrong in both modes:
+ *
+ *   - Standalone signs every statement with ONE shared account
+ *     (statementSigner.ts), so `player === signedBy` is false for everybody and
+ *     enforcing it rejects all traffic.
+ *   - In host mode `createProofAuthorized` lets the host pick the
+ *     allowance-bearing account. That is expected to be the product account,
+ *     i.e. `address` — but "expected" is not "verified", and it cannot be
+ *     verified without a real host container.
+ *
+ * So enforcement needs a real-host experiment first (log `signedBy` beside
+ * `address` for a session and compare), and a standalone story — per-player
+ * keys, or accepting that standalone is unauthenticated. Until then the value
+ * is extracted and passed so the experiment is a one-line change.
+ */
 function ss58FromProof(proof: SignedStatement['proof']): string | null {
   if (!proof) return null
   try {
@@ -240,7 +261,14 @@ class StatementStoreHost {
     // Wait for the attach rather than reading this.store — see the note on
     // `ready`. The caller routinely arrives before getStatementStore() has
     // resolved, and failing there drops the first statement of the session.
-    const store = this.ready ? await this.ready : this.store
+    if (!this.ready) {
+      // connect() has not been called: in practice the host has not handed over
+      // a product account yet, so statementStore deferred. Fail fast and
+      // honestly — the alternative that used to happen here was routing into
+      // the standalone WebSocket transport, which hung forever.
+      throw new Error('[SS:Host] Not connected — waiting for the host to hand over an account')
+    }
+    const store = await this.ready
     if (!store || this.disposed) {
       throw new Error('[SS:Host] Not connected — the host served no Statement Store')
     }

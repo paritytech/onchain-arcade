@@ -122,6 +122,10 @@ class StatementStore {
 
     if (this._rpcConnected) return
 
+    // `_signer` is the chain-verified statement signer and is deliberately
+    // unused — move authorship is trusted from the JSON payload. See the note
+    // on ss58FromProof in statementStoreHost.ts for why enforcing it needs a
+    // real-host experiment first rather than a one-line guess.
     const onStatement = (gameStmt: GameStatement, _signer: Uint8Array | string | null) => {
       const ingested = this.ingestRemote(gameStmt)
       if (ingested) {
@@ -133,6 +137,14 @@ class StatementStore {
     }
 
     if (inHost) {
+      // Set BEFORE the defer check, not after. applyAndSubmit picks its
+      // transport from this flag, and leaving it false while deferred routed
+      // host-mode submits into statementStoreRpc — which was never connected,
+      // so `_waitForConnection()` awaited a promise only `_doConnect()` ever
+      // resolves and `makeMove` hung forever with no error and no timeout.
+      // Reachable whenever `address` outlives `hostSigningReady`, which is
+      // exactly what a bridge interrupt produces.
+      this._useHostTransport = true
       if (!hostSigningReady) {
         // No product account yet — GameContext re-runs this once the host
         // hands one over. Connecting now would attach a store that cannot sign.
@@ -141,7 +153,6 @@ class StatementStore {
       }
       console.log('[GameStore] Connecting via the host transport...')
       this._rpcConnected = true
-      this._useHostTransport = true
       void statementStoreHost.connect(onStatement)
     } else {
       console.log('[GameStore] Connecting via raw WebSocket RPC transport (standalone)...')

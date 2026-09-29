@@ -451,9 +451,10 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
   }, []);
 
   /** Host mode bootstrap: product account + reconnect subscription. */
-  const initHostMode = useCallback(async () => {
+  const initHostMode = useCallback(async (cancelled: () => boolean) => {
     try {
       const signedIn = await applyProductAccount();
+      if (cancelled()) return;
       if (!signedIn) {
         // Not a failure — the host has no active session yet. Say so, because
         // in host mode the wallet modal auto-closes and there is no in-app
@@ -480,12 +481,31 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
           }
         }
       });
+      // An interrupt is the bridge dying under us, not a clean sign-out. It
+      // used to clear only hostSigningReady, which left `selectedAccount` set —
+      // so `isConnected` stayed true, the header kept showing an account that
+      // could no longer sign, and the statement transport deferred forever with
+      // nothing on screen to say why. Treat it as a disconnect and say so.
       sub.onInterrupt(() => {
+        if (cancelled()) return;
         hostSignerRef.current = null;
         setHostSigningReady(false);
+        setSelectedAccount(null);
+        setAccounts([]);
+        setError(
+          'Lost the connection to the host. Reload to reconnect — moves cannot be published until you do.',
+        );
       });
+      if (cancelled()) {
+        // Unmounted (or StrictMode re-ran the effect) while we were awaiting.
+        // Nothing will ever read this subscription, so drop it here rather than
+        // leaking it past the cleanup that already ran.
+        sub.unsubscribe();
+        return;
+      }
       connectionSubRef.current = sub;
     } catch (err) {
+      if (cancelled()) return;
       // `detail` is its own field, not only part of `err`: a host error often
       // carries its reason in a tag the error message drops.
       const detail = hostErrorTag(err) ?? (err instanceof Error ? err.message : formatHostError(err));
@@ -499,7 +519,18 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
   }, [applyProductAccount]);
 
   // Main init effect — pick the mode, then bootstrap it.
+  //
+  // React.StrictMode (src/main.tsx) runs this twice in dev. Without the
+  // cancellation flag the second run raced the first: two concurrent
+  // getProductAccount calls — each of which can open a host confirmation
+  // dialog — and the second subscription overwrote the first in the ref
+  // without unsubscribing it. The cleanup lives HERE rather than in a
+  // separate []-dep effect, because that one fired before the awaits below
+  // had assigned anything for it to clean up.
   useEffect(() => {
+    let disposed = false;
+    const cancelled = () => disposed;
+
     const init = async () => {
       // Storage init is synchronous (no-op), but call it to satisfy the contract
       await initStorage();
@@ -519,10 +550,10 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
             initChainClient().catch((err) =>
               console.error('[Wallet] Chain client init failed:', err)
             ),
-            initHostMode(),
+            initHostMode(cancelled),
           ]);
         } finally {
-          setIsConnecting(false);
+          if (!cancelled()) setIsConnecting(false);
         }
       } else {
         // Standalone: show Connect Wallet immediately, restore wallet state.
@@ -534,16 +565,21 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
     };
 
     init();
+    return () => {
+      disposed = true;
+      connectionSubRef.current?.unsubscribe();
+      connectionSubRef.current = null;
+    };
   }, [initHostMode, restoreConnection]);
 
-  // Cleanup on unmount
+  // Teardown that must NOT run on a StrictMode remount: the wallet-extension
+  // subscription and the shared PAPI client outlive a re-render, and
+  // destroying the client here would leave every later chain read throwing.
   useEffect(() => {
     return () => {
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
       }
-      connectionSubRef.current?.unsubscribe();
-      connectionSubRef.current = null;
       disconnectPAPIClient();
     };
   }, []);

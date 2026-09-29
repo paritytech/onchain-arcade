@@ -85,6 +85,26 @@ describe('statementStoreHost connect/submit race', () => {
     statementStoreHost.onFatalError = undefined
   })
 
+  it('a submit with no connect() fails fast instead of hanging', async () => {
+    // This is the host-mode defer state: statementStore has selected the host
+    // transport but the product account has not arrived, so connect() has not
+    // been called. It used to route into the standalone WebSocket transport,
+    // whose _waitForConnection() awaits a promise only _doConnect() resolves —
+    // so makeMove never returned, with no error and no timeout.
+    //
+    // The guarantee under test is "settles quickly", not the exact wording:
+    // submit() rejects with "Disposed" after a disconnect and "waiting for the
+    // host to hand over an account" on a never-connected instance. Both are
+    // fail-fast, which is the whole point — the old path returned neither.
+    const settled = await Promise.race([
+      statementStoreHost.submit(stmt).then(() => 'resolved').catch((e: Error) => e.message),
+      new Promise((r) => setTimeout(() => r('HUNG'), 50)),
+    ])
+    expect(settled).not.toBe('HUNG')
+    expect(settled).toMatch(/Disposed|Not connected/)
+    expect(submitted).toHaveLength(0)
+  })
+
   it('concurrent connects share one attach', async () => {
     const a = statementStoreHost.connect(() => {})
     const b = statementStoreHost.connect(() => {})
