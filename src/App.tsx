@@ -3,6 +3,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import { NotificationProvider } from './contexts/NotificationProvider'
 import { WalletProvider } from './contexts/WalletProvider'
 import { GameProvider } from './contexts/GameContext'
+import { VoiceProvider } from './contexts/VoiceContext'
 import { Header } from './components/Header'
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { HomePage } from './pages/HomePage'
@@ -16,6 +17,7 @@ export default function App() {
           <WalletProvider>
             <HashRouter>
               <GameProvider>
+                <VoiceProvider>
                 <div className="min-h-screen bg-bg">
                   <Header />
                   <main className="px-4 md:px-8 py-6">
@@ -27,6 +29,7 @@ export default function App() {
                     </div>
                   </main>
                 </div>
+                </VoiceProvider>
               </GameProvider>
             </HashRouter>
           </WalletProvider>

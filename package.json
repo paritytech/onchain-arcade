@@ -11,6 +11,8 @@
     "relay": "node server/relay.js"
   },
   "dependencies": {
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
     "@parity/product-sdk": "0.29.0",
     "@polkadot-api/sdk-ink": "^0.7.0",
     "@polkadot-api/substrate-bindings": "^0.20.3",

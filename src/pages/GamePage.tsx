@@ -5,6 +5,7 @@ import { ArrowLeft, Copy, Share2, RotateCcw, Gamepad2, UserPlus, Info } from 'lu
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { VoiceBar } from '@/components/VoiceBar'
 import { GameBoard, getBestMove } from '@/lib/games/tic-tac-toe'
 import { ConnectFourBoard, getBestColumnMove } from '@/lib/games/connect-four'
 import { NimBoard, getBestNimMove } from '@/lib/games/nim-game'
@@ -339,6 +340,12 @@ export function GamePage() {
         >
           <Info className="w-4 h-4" />
         </button>
+        {/* Voice sits in the header row, not beside the board: it is a
+            persistent per-match control, and anything adjacent to the board
+            competes with the thing the player is actually looking at. */}
+        <div className="ml-auto">
+          <VoiceBar />
+        </div>
       </motion.div>
 
       {/* Status Bar */}

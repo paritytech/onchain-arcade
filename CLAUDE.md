@@ -60,6 +60,12 @@ src/
 │   │   ├── allocation.ts      # RFC-0010 requestResourceAllocation, outcomes by tag
 │   │   ├── allowance.ts       # StatementStoreAllowance + StatementSubmit grants
 │   │   └── expiry.ts          # (expiry << 32 | sequence) packing + priority floor
+│   ├── voice/                 # 1-to-1 WebRTC audio
+│   │   ├── VoiceSession.ts    # One call: RTCPeerConnection + 3-statement handshake
+│   │   └── sdpSeal.ts         # X25519 sealed box — SDP must never travel in clear
+│   ├── webrtc/
+│   │   ├── iceConfig.ts       # STUN + TURN, env-overridable
+│   │   └── microphone.ts      # Host-mediated mic permission + capture + level meter
 │   ├── papi/client.ts         # PAPI singleton (getPAPIClient, ss58ToH160, disconnectPAPIClient)
 │   ├── contracts/
 │   │   ├── config.ts          # RPC endpoints, contract address from env
@@ -123,6 +129,44 @@ be confused — `statementStore.connectRpc(mode, hostSigningReady)` picks one.
 - **Local cache**: localStorage plus BroadcastChannel for cross-tab sync; the
   Statement Store is the source of truth.
 - **Share links**: include `&host=ADDRESS` so the other device can bootstrap.
+
+### Voice (1-to-1 WebRTC audio)
+
+Two players in a match can open a direct audio channel. Signalling rides the
+SAME Statement Store topic as moves — the two parties to a call are exactly the
+two players — but voice statements are **not** game history and never enter the
+statement log (`statementStore` branches them at `isVoiceStatement` before
+ingestion; replaying an SDP blob into the deriver would be both wasteful and
+wrong).
+
+Three statements per call, because the SDP must be sealed to a key the sealer
+does not have yet:
+
+```
+A -> voice_invite  { boxPub: A_pub }             "want to talk?"
+B -> voice_offer   { boxPub: B_pub, sealed(A) }   B accepts and offers
+A -> voice_answer  { sealed(B) }                  A answers
+```
+
+The **inviter becomes the WebRTC answerer**, so a declined invite costs no ICE
+traffic. ICE is non-trickle (gather fully, then publish) — statement allowance
+is the scarce resource, not latency. Simultaneous invites are resolved by lower
+SS58 wins.
+
+- **SDP sealing is mandatory, not a nicety** (`lib/voice/sdpSeal.ts`). A
+  non-trickle SDP contains the player's public IP and the Statement Store is a
+  public bulletin board. X25519 → HKDF-SHA256 → AES-256-GCM, ephemeral key per
+  message. A sealed SDP that will not open is DROPPED — never retried in clear.
+- **Ask the host for `Microphone` before `getUserMedia`** (`lib/webrtc/microphone.ts`).
+  The Desktop webview maps every `getUserMedia` to one `Camera` permission, so
+  the mic never gets its OS prompt and capture fails even after the user
+  approves the host dialog. This is the most likely cause of "voice does nothing
+  on desktop".
+- Mute disables the track rather than stopping it: stopping releases the device
+  and needs a fresh permission round-trip to undo.
+- Scope is deliberately 1-to-1. Emoji Pictionary (3–8 players) is excluded —
+  `VoiceContext` returns `available: false` for it and for `vs Computer`.
+- See `docs/p2p-voice-video.md` for the mesh/video analysis this was cut down from.
 
 ### Real-Time Updates
 Game state updates are **push-based** via Statement Store subscription (`statement_subscribeStatement`).
