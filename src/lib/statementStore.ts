@@ -3,8 +3,9 @@
 // received in real-time via subscription. localStorage serves as a local cache.
 
 import type { GameStatement } from '@/types/game'
+import { isVoiceStatement, type VoiceStatement } from '@/types/voice'
 import { statementStoreRpc } from './statementStoreRpc'
-import { statementStoreHost } from './statementStoreHost'
+import { statementStoreHost, type StoreStatement } from './statementStoreHost'
 import { deriveGame } from './games'
 
 export type { DerivedGame, DerivedTicTacToe, DerivedConnectFour, DerivedNim } from '@/types/derived-game'
@@ -57,6 +58,13 @@ class StatementStore {
    * Wired in GameProvider.
    */
   onSubmitError?: (error: Error, stmt: GameStatement) => void
+
+  /**
+   * A voice-signalling statement addressed to this app arrived. Wired by the
+   * voice context. `signer` is the chain-verified statement signer where the
+   * transport could recover one, for a future authorship check.
+   */
+  onVoiceSignal?: (stmt: VoiceStatement, signer: Uint8Array | string | null) => void
 
   constructor() {
     this.statements = loadStatements()
@@ -123,10 +131,19 @@ class StatementStore {
     if (this._rpcConnected) return
 
     // `_signer` is the chain-verified statement signer and is deliberately
-    // unused — move authorship is trusted from the JSON payload. See the note
-    // on ss58FromProof in statementStoreHost.ts for why enforcing it needs a
-    // real-host experiment first rather than a one-line guess.
-    const onStatement = (gameStmt: GameStatement, _signer: Uint8Array | string | null) => {
+    // unused for game moves — move authorship is trusted from the JSON payload.
+    // See the note on ss58FromProof in statementStoreHost.ts for why enforcing
+    // it needs a real-host experiment first rather than a one-line guess.
+    const onStatement = (incoming: StoreStatement, _signer: Uint8Array | string | null) => {
+      // Voice signalling shares this topic but is NOT game history: the game is
+      // derived by replaying the log, and a phone call has no place in it.
+      // Branch BEFORE ingestion — one SDP blob per call in localStorage, replayed
+      // on every load, would be both wasteful and wrong.
+      if (isVoiceStatement(incoming)) {
+        this.onVoiceSignal?.(incoming, _signer)
+        return
+      }
+      const gameStmt = incoming
       const ingested = this.ingestRemote(gameStmt)
       if (ingested) {
         const game = this.getGame(gameStmt.gameId)
@@ -308,6 +325,25 @@ class StatementStore {
     }
 
     return this.getGame(stmt.gameId)
+  }
+
+  /**
+   * Publish a voice-signalling statement.
+   *
+   * Deliberately does NOT go through applyAndSubmit: there is no local state to
+   * apply and nothing to persist. Errors propagate to the caller rather than
+   * being swallowed — the voice layer has its own UI for a call that cannot be
+   * placed, and reporting it as a failed game move would be wrong.
+   */
+  async submitVoice(stmt: VoiceStatement): Promise<void> {
+    if (!this._rpcConnected) {
+      throw new Error('Voice signalling is not connected yet.')
+    }
+    if (this._useHostTransport) {
+      await statementStoreHost.submit(stmt)
+    } else {
+      await statementStoreRpc.submit(stmt)
+    }
   }
 
   /**

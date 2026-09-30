@@ -1,83 +1,123 @@
-import { useState } from 'react'
+// The lobby.
+//
+// Was one flat grid of twelve hand-written cards, each carrying its own variant
+// selector. Twelve games in a flat grid reads as a dump rather than a
+// selection, and the on-card selectors made the grid ragged (cards with one
+// were taller) while leaving nowhere for "how to play" — the thing a catalogue
+// of unfamiliar games most needs.
+//
+// Now: labelled shelves, uniform identity-only cards, and everything
+// configurable behind a setup sheet. Data lives in lib/games/catalog.ts.
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Copy, Check, Grid3X3, Layers, CircleDot, Box, Gem, Disc, Info, Type, Scissors, Shuffle, Puzzle, Castle, Smile } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
+import { ArrowRight, Check, Copy, Info, Users } from 'lucide-react'
+
 import { Modal } from '@/components/ui/Modal'
+import { GameSetupSheet, type SetupChoice } from '@/components/GameSetupSheet'
+import { JoinByCode } from '@/components/JoinByCode'
 import { staggerContainer, staggerItem } from '@/lib/animation-variants'
 import { usePolkadotWallet } from '@/contexts/WalletContext'
 import { useGame } from '@/contexts/GameContext'
 import { useNotifications } from '@/contexts/NotificationProvider'
 import { GAME_RULES } from '@/lib/game-rules'
-import type { GameType, GridSize } from '@/types/game'
-import { WIN_LENGTH } from '@/types/game'
+import { cn } from '@/lib/cn'
+import { CATALOG, SHELF_LABEL, entriesOn, entryFor, type GameEntry, type Shelf } from '@/lib/games/catalog'
+import type { GameType } from '@/types/game'
 
-const GRID_OPTIONS: { size: GridSize; label: string }[] = [
-  { size: 3, label: '3x3' },
-  { size: 5, label: '5x5' },
-  { size: 7, label: '7x7' },
-]
+function GameCard({ entry, onPick, onRules }: {
+  entry: GameEntry
+  onPick: (e: GameEntry) => void
+  onRules: (g: GameType) => void
+}) {
+  return (
+    <motion.button
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      onClick={() => onPick(entry)}
+      className={cn(
+        'group relative text-left w-full rounded-2xl border p-5 transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+        entry.cardClass,
+      )}
+    >
+      <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center mb-3', entry.iconWrapClass)}>
+        <entry.icon className={cn('w-5 h-5', entry.iconClass)} aria-hidden="true" />
+      </div>
 
-const NIM_PRESETS: { label: string; heaps: number[] }[] = [
-  { label: 'Quick', heaps: [1, 2, 3] },
-  { label: 'Classic', heaps: [3, 4, 5] },
-  { label: 'Big', heaps: [3, 5, 7] },
-]
+      <h3 className="text-base font-bold text-text-primary tracking-tight">{entry.name}</h3>
+      <p className="text-caption text-text-secondary mt-0.5 leading-snug">{entry.tagline}</p>
+
+      <p className="flex items-center gap-1.5 text-caption text-text-tertiary mt-3">
+        <Users className="w-3.5 h-3.5" aria-hidden="true" />
+        {entry.players}
+      </p>
+
+      {/* Rules are reachable without committing to the setup sheet. Nested
+          inside a button would be invalid markup, so it is a sibling overlay. */}
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={(e) => { e.stopPropagation(); onRules(entry.id) }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onRules(entry.id) }
+        }}
+        className="absolute top-4 right-4 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+        aria-label={`How to play ${entry.name}`}
+      >
+        <Info className="w-4 h-4" />
+      </span>
+    </motion.button>
+  )
+}
 
 export function HomePage() {
   const navigate = useNavigate()
   const { address } = usePolkadotWallet()
-  const { createGame, isLoading } = useGame()
+  const { createGame, isLoading, games } = useGame()
   const { addNotification } = useNotifications()
+
+  const [setupFor, setSetupFor] = useState<GameEntry | null>(null)
+  const [rulesGame, setRulesGame] = useState<GameType | null>(null)
   const [createdCode, setCreatedCode] = useState<string | null>(null)
   const [createdGameType, setCreatedGameType] = useState<GameType>('tic-tac-toe')
   const [copied, setCopied] = useState(false)
-  const [selectedGrid, setSelectedGrid] = useState<GridSize>(3)
-  const [selectedNimPreset, setSelectedNimPreset] = useState(1)
-  const [rulesGame, setRulesGame] = useState<GameType | null>(null)
-  const [emojiPlayers, setEmojiPlayers] = useState(3)
 
+  /** Games this player is in that have not finished. The research calls a
+   *  "Continue" row the single highest-value thing in a lobby, and it is the
+   *  only row whose contents change. */
+  const inProgress = useMemo(
+    () => (address ? games.filter(
+      (g) => g.status !== 'finished' && (g.playerX === address || g.playerO === address),
+    ).slice(0, 6) : []),
+    [games, address],
+  )
 
-  const handleCreate = async (gameType: GameType, vsComputer = false) => {
-    let gameId: string | null = null
-    switch (gameType) {
-      case 'tic-tac-toe':
-        gameId = await createGame('tic-tac-toe', { gridSize: selectedGrid, vsComputer })
-        break
-      case 'connect-four':
-        gameId = await createGame('connect-four', { vsComputer })
-        break
-      case 'nim':
-        gameId = await createGame('nim', { nimConfig: NIM_PRESETS[selectedNimPreset].heaps, vsComputer })
-        break
-      case 'dots-and-boxes':
-      case 'mancala':
-      case 'reversi':
-      case 'ghost':
-      case 'hackenbush':
-      case 'entropy':
-      case 'blokus-duo':
-      case 'tak':
-        gameId = await createGame(gameType, { vsComputer })
-        break
-      case 'emoji-pictionary':
-        gameId = await createGame('emoji-pictionary', { maxPlayers: emojiPlayers })
-        break
+  const handleStart = async (choice: SetupChoice) => {
+    const entry = setupFor
+    if (!entry) return
+    const gameId = await createGame(entry.id, {
+      gridSize: choice.gridSize,
+      nimConfig: choice.nimConfig,
+      maxPlayers: choice.maxPlayers,
+      vsComputer: choice.vsComputer,
+    })
+    setSetupFor(null)
+    if (!gameId) return
+    if (choice.vsComputer) {
+      navigate(`/play?game=${gameId}`)
+      return
     }
-    if (gameId) {
-      if (vsComputer) {
-        navigate(`/play?game=${gameId}`)
-        return
-      }
-      setCreatedCode(gameId)
-      setCreatedGameType(gameType)
-    }
+    setCreatedCode(gameId)
+    setCreatedGameType(entry.id)
   }
 
-  const handleCopyCode = async () => {
+  const shareUrl = createdCode
+    ? `${window.location.origin}${window.location.pathname}#/play?game=${createdCode}&host=${address}&type=${createdGameType}`
+    : ''
+
+  const handleCopy = async () => {
     if (!createdCode) return
     try {
-      const shareUrl = `${window.location.origin}${window.location.pathname}#/play?game=${createdCode}&host=${address}&type=${createdGameType}`
       await navigator.clipboard.writeText(shareUrl)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
@@ -86,395 +126,99 @@ export function HomePage() {
     }
   }
 
-  const handleGoToGame = () => {
-    if (createdCode) navigate(`/play?game=${createdCode}`)
-  }
-
-  const InfoBtn = ({ game }: { game: GameType }) => (
-    <button
-      onClick={(e) => { e.stopPropagation(); setRulesGame(game) }}
-      className="p-1 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 transition-colors text-grey-500 dark:text-grey-500 hover:text-grey-700 dark:hover:text-grey-300"
-      aria-label="Game rules"
-    >
-      <Info className="w-4 h-4" />
-    </button>
-  )
-
-  const GameButtons = ({ game }: { game: GameType }) => (
-    <div className="flex gap-2">
-      <button
-        onClick={() => handleCreate(game)}
-        disabled={isLoading}
-        className="flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all bg-black/5 dark:bg-white/5 text-grey-600 dark:text-grey-300 hover:bg-black/10 dark:hover:bg-white/10 hover:text-grey-900 dark:hover:text-white disabled:opacity-40 disabled:cursor-not-allowed border border-black/10 dark:border-white/10 hover:border-black/20 dark:hover:border-white/20"
-      >
-        Multiplayer
-      </button>
-      <button
-        onClick={() => handleCreate(game, true)}
-        disabled={isLoading}
-        className="flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all bg-black/10 dark:bg-white/10 text-grey-700 dark:text-grey-200 hover:bg-black/15 dark:hover:bg-white/15 hover:text-grey-900 dark:hover:text-white disabled:opacity-40 disabled:cursor-not-allowed border border-black/15 dark:border-white/15 hover:border-black/25 dark:hover:border-white/25"
-      >
-        vs Computer
-      </button>
-    </div>
+  const shelf = (id: Shelf) => (
+    <motion.section variants={staggerItem} key={id} aria-labelledby={`shelf-${id}`}>
+      <h2 id={`shelf-${id}`} className="font-sans text-body-sm font-semibold text-text-secondary mb-3">
+        {SHELF_LABEL[id]}
+      </h2>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {entriesOn(id).map((e) => (
+          <GameCard key={e.id} entry={e} onPick={setSetupFor} onRules={setRulesGame} />
+        ))}
+      </div>
+    </motion.section>
   )
 
   return (
-    <motion.div
-      variants={staggerContainer}
-      initial="hidden"
-      animate="visible"
-      className="space-y-8 pt-4"
-    >
-      {/* Title */}
+    <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="space-y-10 pt-4">
       <motion.div variants={staggerItem} className="text-center">
         <h1 className="font-serif text-h1 text-text-primary mb-1">onchain arcade</h1>
-        <p className="text-body-sm text-text-secondary">Pick a game, share the code, play in real-time</p>
+        <p className="text-body-sm text-text-secondary">Pick a game, share the code, play in real time</p>
       </motion.div>
 
-      {/* Created game code */}
+      <motion.div variants={staggerItem}>
+        <JoinByCode />
+      </motion.div>
+
+      {/* The waiting state. Previously a code and two buttons; the opponent's
+          absence was dead time with nothing to do in it. Playing the computer
+          already existed — it was just in the wrong place. */}
       {createdCode && (
-        <motion.div
-          variants={staggerItem}
-          className="p-px rounded-2xl bg-gradient-to-br from-brand/30 via-border to-border"
-        >
-          <div className="bg-surface rounded-[15px] p-5">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="flex-1">
-                <p className="text-body-sm text-text-secondary mb-1">Share this link with your opponent</p>
-                <p className="text-h3 font-mono text-brand tracking-widest">{createdCode}</p>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleCopyCode}
-                  leftIcon={copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                >
-                  {copied ? 'Copied' : 'Copy Link'}
-                </Button>
-                <Button variant="primary" size="sm" onClick={handleGoToGame}>
-                  Go to Game
-                </Button>
-              </div>
-            </div>
+        <motion.div variants={staggerItem} className="rounded-2xl border border-border bg-surface p-5">
+          <p className="text-body-sm text-text-secondary">Share this with your opponent</p>
+          <p className="font-mono text-h3 text-brand tracking-[0.2em] my-2">{createdCode}</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleCopy}
+              className="px-4 py-2.5 rounded-xl border border-border text-body-sm text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-colors min-h-[44px] flex items-center gap-2"
+            >
+              {copied ? <Check className="w-4 h-4" aria-hidden="true" /> : <Copy className="w-4 h-4" aria-hidden="true" />}
+              {copied ? 'Copied' : 'Copy link'}
+            </button>
+            <button
+              onClick={() => navigate(`/play?game=${createdCode}`)}
+              className="px-4 py-2.5 rounded-xl bg-accent text-white text-body-sm font-medium min-h-[44px] flex items-center gap-2"
+            >
+              Open the game
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </button>
           </div>
+          <p className="text-caption text-text-tertiary mt-3">
+            Waiting for them to join. The link works until the game ends.
+          </p>
         </motion.div>
       )}
 
-      {/* Game Cards */}
-      <motion.div variants={staggerItem} className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-
-        {/* --- Tic-Tac-Toe --- */}
-        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-pink-500/20 bg-gradient-to-b from-pink-100/80 to-grey-100/90 dark:from-pink-950/40 dark:to-grey-900/80">
-          <div className="absolute top-4 right-4 grid grid-cols-3 gap-1 opacity-[0.07] group-hover:opacity-[0.15] transition-opacity" aria-hidden="true">
-            {['X','O','','','X','','O','','X'].map((c, i) => (
-              <div key={i} className="w-5 h-5 rounded text-[10px] font-bold flex items-center justify-center border border-pink-300">{c}</div>
-            ))}
-          </div>
-          <div className="relative p-6 space-y-5">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-pink-500/15 flex items-center justify-center mb-3">
-                <Grid3X3 className="w-5 h-5 text-pink-400" aria-hidden="true" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-lg font-bold text-text-primary tracking-tight">Tic-Tac-Toe</h3>
-                <InfoBtn game="tic-tac-toe" />
-              </div>
-              <p className="text-caption text-grey-600 dark:text-grey-400 mt-0.5">Classic grid strategy</p>
-            </div>
-            <div className="flex gap-1.5">
-              {GRID_OPTIONS.map(opt => (
-                <button key={opt.size} onClick={() => setSelectedGrid(opt.size)} className={`flex-1 py-2 rounded-lg text-caption font-semibold transition-all ${selectedGrid === opt.size ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/25' : 'bg-black/5 dark:bg-white/5 text-grey-600 dark:text-grey-400 hover:bg-black/10 dark:hover:bg-white/10 hover:text-grey-800 dark:hover:text-grey-200'}`}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-caption text-grey-600 dark:text-grey-500 text-center h-4">
-              {selectedGrid > 3 ? `${WIN_LENGTH[selectedGrid]} in a row to win` : ''}
-            </p>
-            <GameButtons game="tic-tac-toe" />
-          </div>
-        </motion.div>
-
-        {/* --- Connect Four --- */}
-        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-b from-blue-100/80 to-grey-100/90 dark:from-blue-950/40 dark:to-grey-900/80">
-          <div className="absolute top-4 right-4 flex gap-1 opacity-[0.12] group-hover:opacity-[0.22] transition-opacity" aria-hidden="true">
-            {[0,1,2,3].map(i => (
-              <div key={i} className="flex flex-col gap-1">
-                {[0,1,2].map(j => (
-                  <div key={j} className={`w-4 h-4 rounded-full ${(i+j)%3===0?'bg-red-400':(i+j)%3===1?'bg-yellow-400':'bg-blue-300/30'}`} />
-                ))}
-              </div>
-            ))}
-          </div>
-          <div className="relative p-6 space-y-5">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center mb-3">
-                <Layers className="w-5 h-5 text-blue-400" aria-hidden="true" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-lg font-bold text-text-primary tracking-tight">Connect Four</h3>
-                <InfoBtn game="connect-four" />
-              </div>
-              <p className="text-caption text-grey-600 dark:text-grey-400 mt-0.5">Drop discs, get 4 in a row</p>
-            </div>
-            <p className="text-caption text-grey-600 dark:text-grey-500 leading-relaxed">
-              7 x 6 grid with gravity. Connect 4 horizontally, vertically, or diagonally to win.
-            </p>
-            <GameButtons game="connect-four" />
-          </div>
-        </motion.div>
-
-        {/* --- Nim --- */}
-        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-b from-amber-100/80 to-grey-100/90 dark:from-amber-950/30 dark:to-grey-900/80">
-          <div className="absolute top-4 right-4 flex flex-col gap-1.5 opacity-[0.12] group-hover:opacity-[0.22] transition-opacity" aria-hidden="true">
-            {[3,4,5].map((n, row) => (
-              <div key={row} className="flex gap-1">
-                {Array.from({ length: n }, (_, i) => (<div key={i} className="w-3.5 h-3.5 rounded-full bg-amber-400" />))}
-              </div>
-            ))}
-          </div>
-          <div className="relative p-6 space-y-5">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center mb-3">
-                <CircleDot className="w-5 h-5 text-amber-400" aria-hidden="true" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-lg font-bold text-text-primary tracking-tight">Nim</h3>
-                <InfoBtn game="nim" />
-              </div>
-              <p className="text-caption text-grey-600 dark:text-grey-400 mt-0.5">Take tokens, avoid the last</p>
-            </div>
-            <div className="flex gap-1.5">
-              {NIM_PRESETS.map((preset, idx) => (
-                <button key={preset.label} onClick={() => setSelectedNimPreset(idx)} className={`flex-1 py-2 rounded-lg text-caption font-semibold transition-all ${selectedNimPreset === idx ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/25' : 'bg-black/5 dark:bg-white/5 text-grey-600 dark:text-grey-400 hover:bg-black/10 dark:hover:bg-white/10 hover:text-grey-800 dark:hover:text-grey-200'}`}>
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-caption text-grey-600 dark:text-grey-500 text-center">Heaps: [{NIM_PRESETS[selectedNimPreset].heaps.join(', ')}]</p>
-            <GameButtons game="nim" />
-          </div>
-        </motion.div>
-
-        {/* --- Dots and Boxes --- */}
-        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-b from-emerald-100/80 to-grey-100/90 dark:from-emerald-950/40 dark:to-grey-900/80">
-          <div className="absolute top-4 right-4 grid grid-cols-3 gap-0.5 opacity-[0.08] group-hover:opacity-[0.18] transition-opacity" aria-hidden="true">
-            {Array.from({ length: 16 }, (_, i) => (<div key={i} className="w-2 h-2 rounded-full bg-emerald-400" />))}
-          </div>
-          <div className="relative p-6 space-y-5">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center mb-3">
-                <Box className="w-5 h-5 text-emerald-400" aria-hidden="true" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-lg font-bold text-text-primary tracking-tight">Dots & Boxes</h3>
-                <InfoBtn game="dots-and-boxes" />
-              </div>
-              <p className="text-caption text-grey-600 dark:text-grey-400 mt-0.5">Draw lines, claim boxes</p>
-            </div>
-            <p className="text-caption text-grey-600 dark:text-grey-500 leading-relaxed">
-              Connect dots with lines. Complete a box to claim it and earn an extra turn. Most boxes wins.
-            </p>
-            <GameButtons game="dots-and-boxes" />
-          </div>
-        </motion.div>
-
-        {/* --- Mancala --- */}
-        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-b from-violet-100/80 to-grey-100/90 dark:from-violet-950/40 dark:to-grey-900/80">
-          <div className="absolute top-4 right-4 flex gap-2 opacity-[0.08] group-hover:opacity-[0.18] transition-opacity" aria-hidden="true">
-            {[3,4,3].map((n, row) => (
-              <div key={row} className="flex flex-col gap-1">
-                {Array.from({ length: n }, (_, i) => (<div key={i} className="w-3 h-3 rounded-full bg-violet-400" />))}
-              </div>
-            ))}
-          </div>
-          <div className="relative p-6 space-y-5">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-violet-500/15 flex items-center justify-center mb-3">
-                <Gem className="w-5 h-5 text-violet-400" aria-hidden="true" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-lg font-bold text-text-primary tracking-tight">Mancala</h3>
-                <InfoBtn game="mancala" />
-              </div>
-              <p className="text-caption text-grey-600 dark:text-grey-400 mt-0.5">Sow stones, capture to win</p>
-            </div>
-            <p className="text-caption text-grey-600 dark:text-grey-500 leading-relaxed">
-              Pick up stones, sow them counterclockwise. Land in your store for an extra turn. Most stones wins.
-            </p>
-            <GameButtons game="mancala" />
-          </div>
-        </motion.div>
-
-        {/* --- Reversi --- */}
-        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-teal-500/20 bg-gradient-to-b from-teal-100/80 to-grey-100/90 dark:from-teal-950/40 dark:to-grey-900/80">
-          <div className="absolute top-4 right-4 grid grid-cols-3 gap-1 opacity-[0.08] group-hover:opacity-[0.18] transition-opacity" aria-hidden="true">
-            {[1,0,1,0,1,0,1,0,1].map((v, i) => (
-              <div key={i} className={`w-4 h-4 rounded-full ${v ? 'bg-grey-300' : 'bg-grey-700'}`} />
-            ))}
-          </div>
-          <div className="relative p-6 space-y-5">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-teal-500/15 flex items-center justify-center mb-3">
-                <Disc className="w-5 h-5 text-teal-400" aria-hidden="true" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-lg font-bold text-text-primary tracking-tight">Reversi</h3>
-                <InfoBtn game="reversi" />
-              </div>
-              <p className="text-caption text-grey-600 dark:text-grey-400 mt-0.5">Flip discs, control the board</p>
-            </div>
-            <p className="text-caption text-grey-600 dark:text-grey-500 leading-relaxed">
-              Place discs to flip opponent pieces. Most discs when no moves remain wins. Classic Othello rules.
-            </p>
-            <GameButtons game="reversi" />
-          </div>
-        </motion.div>
-
-        {/* --- Ghost --- */}
-        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-rose-500/20 bg-gradient-to-b from-rose-100/80 to-grey-100/90 dark:from-rose-950/40 dark:to-grey-900/80">
-          <div className="relative p-6 space-y-5">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-rose-500/15 flex items-center justify-center mb-3">
-                <Type className="w-5 h-5 text-rose-400" aria-hidden="true" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-lg font-bold text-text-primary tracking-tight">Ghost</h3>
-                <InfoBtn game="ghost" />
-              </div>
-              <p className="text-caption text-grey-600 dark:text-grey-400 mt-0.5">Word game — don't finish the word</p>
-            </div>
-            <p className="text-caption text-grey-600 dark:text-grey-500 leading-relaxed">
-              Add letters to a growing word. Complete a 4+ letter word and you lose. Accumulate G-H-O-S-T and you're out.
-            </p>
-            <GameButtons game="ghost" />
-          </div>
-        </motion.div>
-
-        {/* --- Hackenbush --- */}
-        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-red-500/20 bg-gradient-to-b from-red-100/80 to-grey-100/90 dark:from-red-950/40 dark:to-grey-900/80">
-          <div className="relative p-6 space-y-5">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center mb-3">
-                <Scissors className="w-5 h-5 text-red-400" aria-hidden="true" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-lg font-bold text-text-primary tracking-tight">Hackenbush</h3>
-                <InfoBtn game="hackenbush" />
-              </div>
-              <p className="text-caption text-grey-600 dark:text-grey-400 mt-0.5">Cut edges, collapse the graph</p>
-            </div>
-            <p className="text-caption text-grey-600 dark:text-grey-500 leading-relaxed">
-              Remove colored edges from a graph. Disconnected parts fall. Last player to move wins.
-            </p>
-            <GameButtons game="hackenbush" />
-          </div>
-        </motion.div>
-
-        {/* --- Entropy --- */}
-        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-b from-sky-100/80 to-grey-100/90 dark:from-sky-950/40 dark:to-grey-900/80">
-          <div className="relative p-6 space-y-5">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-sky-500/15 flex items-center justify-center mb-3">
-                <Shuffle className="w-5 h-5 text-sky-400" aria-hidden="true" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-lg font-bold text-text-primary tracking-tight">Entropy</h3>
-                <InfoBtn game="entropy" />
-              </div>
-              <p className="text-caption text-grey-600 dark:text-grey-400 mt-0.5">Chaos vs Order — asymmetric strategy</p>
-            </div>
-            <p className="text-caption text-grey-600 dark:text-grey-500 leading-relaxed">
-              Chaos places colored pieces randomly. Order slides them into scoring rows. Roles swap after round 1.
-            </p>
-            <GameButtons game="entropy" />
-          </div>
-        </motion.div>
-
-        {/* --- Blokus Duo --- */}
-        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-fuchsia-500/20 bg-gradient-to-b from-fuchsia-100/80 to-grey-100/90 dark:from-fuchsia-950/40 dark:to-grey-900/80">
-          <div className="relative p-6 space-y-5">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-fuchsia-500/15 flex items-center justify-center mb-3">
-                <Puzzle className="w-5 h-5 text-fuchsia-400" aria-hidden="true" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-lg font-bold text-text-primary tracking-tight">Blokus Duo</h3>
-                <InfoBtn game="blokus-duo" />
-              </div>
-              <p className="text-caption text-grey-600 dark:text-grey-400 mt-0.5">Polyomino spatial puzzle</p>
-            </div>
-            <p className="text-caption text-grey-600 dark:text-grey-500 leading-relaxed">
-              Place tetromino-style shapes on a 14x14 board. Touch corners only, never edges. Most squares wins.
-            </p>
-            <GameButtons game="blokus-duo" />
-          </div>
-        </motion.div>
-
-        {/* --- Tak --- */}
-        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-orange-500/20 bg-gradient-to-b from-orange-100/80 to-grey-100/90 dark:from-orange-950/40 dark:to-grey-900/80">
-          <div className="relative p-6 space-y-5">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center mb-3">
-                <Castle className="w-5 h-5 text-orange-400" aria-hidden="true" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-lg font-bold text-text-primary tracking-tight">Tak</h3>
-                <InfoBtn game="tak" />
-              </div>
-              <p className="text-caption text-grey-600 dark:text-grey-400 mt-0.5">Stack pieces, build roads</p>
-            </div>
-            <p className="text-caption text-grey-600 dark:text-grey-500 leading-relaxed">
-              Place and stack flat stones, walls, and capstones on a 5x5 board. Build a road to connect opposite edges.
-            </p>
-            <GameButtons game="tak" />
-          </div>
-        </motion.div>
-
-        {/* --- Emoji Pictionary --- */}
-        <motion.div whileHover={{ y: -6, transition: { duration: 0.25 } }} className="group relative overflow-hidden rounded-2xl border border-yellow-500/20 bg-gradient-to-b from-yellow-100/80 to-grey-100/90 dark:from-yellow-950/40 dark:to-grey-900/80">
-          <div className="relative p-6 space-y-5">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-yellow-500/15 flex items-center justify-center mb-3">
-                <Smile className="w-5 h-5 text-yellow-400" aria-hidden="true" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-lg font-bold text-text-primary tracking-tight">Emoji Pictionary</h3>
-                <InfoBtn game="emoji-pictionary" />
-              </div>
-              <p className="text-caption text-grey-600 dark:text-grey-400 mt-0.5">3-8 players — describe with emoji!</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-caption text-grey-600 dark:text-grey-500">Players:</span>
-              {[3, 4, 5, 6].map(n => (
+      {inProgress.length > 0 && (
+        <motion.section variants={staggerItem} aria-labelledby="shelf-continue">
+          <h2 id="shelf-continue" className="font-sans text-body-sm font-semibold text-text-secondary mb-3">
+            Continue
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {inProgress.map((g) => {
+              const entry = entryFor(g.gameType ?? 'tic-tac-toe')
+              const yours = g.currentTurn && (
+                (g.currentTurn === 'X' && g.playerX === address) ||
+                (g.currentTurn === 'O' && g.playerO === address)
+              )
+              return (
                 <button
-                  key={n}
-                  onClick={() => setEmojiPlayers(n)}
-                  className={`w-8 h-8 rounded-lg text-caption font-semibold transition-all ${
-                    emojiPlayers === n
-                      ? 'bg-yellow-500 text-white shadow-lg shadow-yellow-500/25'
-                      : 'bg-black/5 dark:bg-white/5 text-grey-600 dark:text-grey-400 hover:bg-black/10 dark:hover:bg-white/10'
-                  }`}
+                  key={g.id}
+                  onClick={() => navigate(`/play?game=${g.id}`)}
+                  className="text-left rounded-xl border border-border bg-surface p-4 hover:border-border-strong transition-colors min-h-[44px]"
                 >
-                  {n}
+                  <p className="text-body-sm font-semibold text-text-primary">{entry?.name ?? g.gameType}</p>
+                  <p className="font-mono text-caption text-text-tertiary">{g.id}</p>
+                  <p className={cn('text-caption mt-1', yours ? 'text-success font-medium' : 'text-text-secondary')}>
+                    {g.status === 'waiting' ? 'Waiting for an opponent' : yours ? 'Your turn' : 'Their turn'}
+                  </p>
                 </button>
-              ))}
-            </div>
-            <button
-              onClick={() => handleCreate('emoji-pictionary')}
-              disabled={isLoading}
-              className="w-full py-2.5 rounded-xl font-semibold text-sm transition-all bg-black/5 dark:bg-white/5 text-grey-600 dark:text-grey-300 hover:bg-black/10 dark:hover:bg-white/10 hover:text-grey-900 dark:hover:text-white disabled:opacity-40 disabled:cursor-not-allowed border border-black/10 dark:border-white/10 hover:border-black/20 dark:hover:border-white/20"
-            >
-              Create Lobby
-            </button>
+              )
+            })}
           </div>
-        </motion.div>
+        </motion.section>
+      )}
 
-      </motion.div>
+      {shelf('quick')}
+      {shelf('deeper')}
 
-      {/* Rules Modal */}
+      <GameSetupSheet
+        entry={setupFor}
+        busy={isLoading}
+        onClose={() => setSetupFor(null)}
+        onStart={handleStart}
+      />
+
       <Modal
         isOpen={rulesGame !== null}
         onClose={() => setRulesGame(null)}
@@ -495,6 +239,9 @@ export function HomePage() {
         )}
       </Modal>
 
+      {CATALOG.length === 0 && (
+        <p className="text-center text-text-secondary">No games available.</p>
+      )}
     </motion.div>
   )
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { HackenbushEdge, HackenbushNode } from '@/types/derived-game'
+import { PLAYER_X_COLOR, PLAYER_O_COLOR } from '@/lib/games/playerTheme'
 
 interface HackenbushBoardProps {
   edges: HackenbushEdge[]
@@ -42,14 +43,29 @@ export function HackenbushBoard({
 
   const getEdgeColor = (edge: HackenbushEdge, hovered: boolean): string => {
     if (!edge.alive) return '#9ca3af' // gray-400
-    if (edge.color === 'R') return hovered ? '#dc2626' : '#b91c1c' // red-600 / red-700
-    return hovered ? '#2563eb' : '#1d4ed8' // blue-600 / blue-700
+    // Red-Blue Hackenbush names its two sides after colours, but the
+    // rendered pair is Okabe-Ito: the game's semantics are 'the two sides',
+    // and red-vs-blue is exactly the pair that collapses under deuteranopia.
+    // deriver.ts assigns Player X the 'R' edges, so 'R' must render as
+    // player-x. Rendering it as player-o inverted the two sides against every
+    // other board in the app.
+    if (edge.color === 'R') return hovered ? '#3D93C7' : PLAYER_X_COLOR
+    return hovered ? '#E6873D' : PLAYER_O_COLOR
   }
 
   const getEdgeOpacity = (edge: HackenbushEdge): number => {
     if (!edge.alive) return 0.2
     return 1
   }
+
+  /**
+   * Stroke pattern per side, so the two are distinguishable without colour.
+   * Hackenbush edges are bare lines — colour carried the whole identity, and
+   * the player pair measures 1.34:1 against each other, under the 3:1 that
+   * WCAG 1.4.11 wants for adjacent graphical parts. Red is dashed, Blue solid.
+   */
+  const getEdgeDash = (edge: HackenbushEdge): string | undefined =>
+    edge.color === 'R' ? undefined : '7 4'
 
   const isClickable = (edge: HackenbushEdge): boolean => {
     return canInteract && edge.alive && edge.color === myColor
@@ -151,6 +167,7 @@ export function HackenbushBoard({
                 onMouseEnter={clickable ? () => setHoveredEdge(edge.id) : undefined}
                 onMouseLeave={clickable ? () => setHoveredEdge(null) : undefined}
                 className={clickable ? 'cursor-pointer' : ''}
+                strokeDasharray={getEdgeDash(edge)}
                 style={{
                   stroke: color,
                   ...(clickable ? { filter: 'url(#glow)' } : {}),
@@ -215,12 +232,15 @@ export function HackenbushBoard({
       {/* Legend */}
       <div className="flex gap-6 text-caption text-text-secondary">
         <div className="flex items-center gap-1.5">
-          <span className="inline-block w-4 h-1 rounded bg-red-500" />
-          <span>Red (Player X)</span>
+          <span className="inline-block w-4 h-1 rounded bg-player-x" />
+          <span>Player X — solid</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="inline-block w-4 h-1 rounded bg-blue-500" />
-          <span>Blue (Player O)</span>
+          <span
+            className="inline-block w-4 h-1 rounded"
+            style={{ backgroundImage: 'repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px)', color: '#D55E00' }}
+          />
+          <span>Player O — dashed</span>
         </div>
       </div>
     </div>
