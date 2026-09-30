@@ -151,6 +151,8 @@ class StatementStoreHost {
   private readonly expiry = createExpiryAllocator()
   /** Last grant outcome surfaced, so one condition reports once. */
   private reportedGrantOutcome: GrantOutcome | null = null
+  /** The product account the grants are for. Null until the host hands one over. */
+  private account: string | null = null
 
   /** Signing/publishing cannot work and will not recover without a reload. */
   onFatalError?: (error: Error) => void
@@ -244,12 +246,27 @@ class StatementStoreHost {
     this.subscription = { unsubscribe: () => sub.unsubscribe() }
   }
 
+  /**
+   * Record the product account the host handed over, and prime its grants.
+   * Called on every handover, not just the first — the same as spotlight-mesh's
+   * `setProductAccount` — so a reconnect re-validates and a different identity
+   * gets its own allowance rather than inheriting the previous one's memo.
+   */
+  setAccount(account: string | null): void {
+    if (account !== this.account) this.reportedGrantOutcome = null
+    this.account = account
+    // Before the attach finishes, attach() primes once the store is up.
+    if (this.store) this.primeGrants()
+  }
+
   /** Ensure the grants are being established without blocking the caller.
-   *  Idempotent and memoized per day-slot, so calling it on every submit costs
-   *  nothing after the first. */
+   *  Idempotent and memoized per day-slot and account, so calling it on every
+   *  submit costs nothing after the first. */
   private primeGrants(): void {
-    void ensureStatementGrants().then((outcome) => {
-      if (outcome === 'granted' || this.disposed) return
+    const account = this.account
+    if (!account) return // no identity to grant for yet — setAccount primes it
+    void ensureStatementGrants(account).then((outcome) => {
+      if (outcome === 'granted' || this.disposed || account !== this.account) return
       if (this.reportedGrantOutcome === outcome) return
       this.reportedGrantOutcome = outcome
       console.error('[SS:Host] Statement grants not available:', outcome)

@@ -16,7 +16,7 @@ import { useNotifications } from '@/contexts/NotificationProvider'
 import { useGame } from '@/contexts/GameContext'
 import { statementStore } from '@/lib/statementStore'
 import { VoiceSession, type VoiceState } from '@/lib/voice/VoiceSession'
-import { meterStream, micPermissionState, type MicPermission } from '@/lib/webrtc/microphone'
+import { meterStream, micPermissionState, watchMicPermission, type MicPermission } from '@/lib/webrtc/microphone'
 import { unlockAudio, playRemote } from '@/lib/webrtc/audioUnlock'
 import { blockAddress, isBlocked } from '@/lib/voice/blocklist'
 import type { VoiceStatement } from '@/types/voice'
@@ -102,7 +102,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const available = !!(gameId && peerAddress && address)
 
   useEffect(() => { setPeerBlocked(isBlocked(peerAddress)) }, [peerAddress])
-  useEffect(() => { void micPermissionState().then(setMicPermission) }, [])
+  useEffect(() => watchMicPermission(setMicPermission), [])
 
   // One <audio> element for the whole provider. Created imperatively rather
   // than rendered: it must survive re-renders and never be unmounted mid-call,

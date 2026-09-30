@@ -84,6 +84,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [addNotification])
 
+  // Attach the host transport and prime the statement grants whenever the host
+  // hands over a product account — at sign-in and on every reconnect — rather
+  // than on the first create/join, so the allowance prompt lands at sign-in
+  // instead of interrupting the player mid-join. The grant is memoized per
+  // day-slot and account, so later games and reloads that day never re-prompt.
+  useEffect(() => {
+    if (mode !== 'host') return
+    statementStoreHost.setAccount(hostSigningReady ? address : null)
+    if (hostSigningReady) statementStore.connectRpc(mode, hostSigningReady)
+  }, [mode, hostSigningReady, address])
+
   const prevMoveCountRef = React.useRef<number>(0)
   useEffect(() => {
     if (!activeGame || !address) return
