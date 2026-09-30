@@ -94,14 +94,52 @@ export async function requestMicrophone(): Promise<MediaStream> {
 export type MicPermission = 'granted' | 'denied' | 'prompt' | 'unknown';
 
 export async function micPermissionState(): Promise<MicPermission> {
+  const status = await queryMicPermission();
+  return status ? readState(status) : 'unknown';
+}
+
+/**
+ * Follow the mic permission live. A one-shot read left the "blocked" notice up
+ * after the player re-enabled the mic in site settings — the Talk button never
+ * came back. Returns an unsubscribe.
+ */
+export function watchMicPermission(onChange: (state: MicPermission) => void): () => void {
+  let stopped = false;
+  let status: PermissionStatus | null = null;
+  const handler = () => { if (status && !stopped) onChange(readState(status)); };
+  void queryMicPermission().then((s) => {
+    if (stopped) return;
+    if (!s) { onChange('unknown'); return; }
+    status = s;
+    s.addEventListener('change', handler);
+    handler();
+  });
+  return () => {
+    stopped = true;
+    status?.removeEventListener('change', handler);
+  };
+}
+
+async function queryMicPermission(): Promise<PermissionStatus | null> {
   try {
     const perms = navigator.permissions;
-    if (!perms?.query) return 'unknown';
-    const status = await perms.query({ name: 'microphone' as PermissionName });
-    return status.state as MicPermission;
+    if (!perms?.query) return null;
+    return await perms.query({ name: 'microphone' as PermissionName });
   } catch {
-    return 'unknown';
+    return null;
   }
+}
+
+/**
+ * Inside a host container the page is framed, and `denied` there reflects the
+ * frame's permission policy, not a choice the player made — the host mediates
+ * the mic through requestDevicePermission. Reporting it as 'denied' hid the
+ * Talk button for good. Let the host flow decide; a real refusal still
+ * surfaces as a failed call.
+ */
+function readState(status: PermissionStatus): MicPermission {
+  const state = status.state as MicPermission;
+  return state === 'denied' && isInTriangleHost() ? 'unknown' : state;
 }
 
 /** Stop every track on a stream. Forgetting this leaves the OS mic indicator

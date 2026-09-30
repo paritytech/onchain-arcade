@@ -84,6 +84,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [addNotification])
 
+  // Attach the host transport as soon as the host hands over the product
+  // account, not on the first create/join. Attaching primes the statement
+  // grants, so the one allowance prompt lands at sign-in — the way
+  // spotlight-mesh primes it in setProductAccount — instead of interrupting the
+  // player mid-join. Memoized per day-slot, so later games never re-prompt.
+  useEffect(() => {
+    if (mode === 'host' && hostSigningReady) statementStore.connectRpc(mode, hostSigningReady)
+  }, [mode, hostSigningReady])
+
   const prevMoveCountRef = React.useRef<number>(0)
   useEffect(() => {
     if (!activeGame || !address) return
