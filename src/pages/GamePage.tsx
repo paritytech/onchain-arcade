@@ -5,6 +5,7 @@ import { ArrowLeft, Copy, Share2, RotateCcw, Gamepad2, UserPlus, Info } from 'lu
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { VoiceBar } from '@/components/VoiceBar'
 import { GameBoard, getBestMove } from '@/lib/games/tic-tac-toe'
 import { ConnectFourBoard, getBestColumnMove } from '@/lib/games/connect-four'
 import { NimBoard, getBestNimMove } from '@/lib/games/nim-game'
@@ -44,18 +45,31 @@ export function GamePage() {
     return () => leaveGame()
   }, [gameId, loadGame, leaveGame])
 
-  // Auto-join when arriving via share link with host param and game not found locally
+  // Auto-join when arriving via a share link, or look the game up when arriving
+  // from the join-by-code field.
+  //
+  // The two cases need very different deadlines. With `&host=` we can join
+  // immediately — the link carries everything needed. Without it (join by
+  // code) the game has to arrive from the Statement Store, which means a
+  // connect, a subscribe and a backfill. The old 100 ms applied to both, so a
+  // typed code reliably showed "Game Not Found" before the transport had
+  // finished connecting — contradicting the join field's own "Joining will
+  // look for it", and leaving a dead end whose only button was Home.
+  const AUTOJOIN_DELAY_MS = 100
+  const LOOKUP_GRACE_MS = 8_000
   const [autoJoinAttempted, setAutoJoinAttempted] = useState(false)
   useEffect(() => {
     if (gameId && !activeGame && !autoJoinAttempted) {
+      const canAutoJoin = !!(hostAddress && address)
       const timer = setTimeout(async () => {
-        if (!activeGame && hostAddress && address) {
+        if (activeGame) return
+        if (canAutoJoin) {
           setAutoJoinAttempted(true)
-          await joinGame(gameId, hostAddress, gameTypeParam || undefined)
-        } else if (!activeGame) {
+          await joinGame(gameId, hostAddress!, gameTypeParam || undefined)
+        } else {
           setGameNotFound(true)
         }
-      }, 100)
+      }, canAutoJoin ? AUTOJOIN_DELAY_MS : LOOKUP_GRACE_MS)
       return () => clearTimeout(timer)
     }
     if (activeGame) setGameNotFound(false)
@@ -240,7 +254,9 @@ export function GamePage() {
       return (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <LoadingSpinner size="lg" />
-          <p className="text-text-secondary">Loading game...</p>
+          <p className="text-text-secondary">
+            {hostAddress ? 'Loading game…' : `Looking for game ${gameId}…`}
+          </p>
         </div>
       )
     }
@@ -339,6 +355,12 @@ export function GamePage() {
         >
           <Info className="w-4 h-4" />
         </button>
+        {/* Voice sits in the header row, not beside the board: it is a
+            persistent per-match control, and anything adjacent to the board
+            competes with the thing the player is actually looking at. */}
+        <div className="ml-auto">
+          <VoiceBar />
+        </div>
       </motion.div>
 
       {/* Status Bar */}

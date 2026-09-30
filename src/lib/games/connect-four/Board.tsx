@@ -13,14 +13,33 @@ interface ConnectFourBoardProps {
   onColumnClick: (col: number) => void
 }
 
+/**
+ * A disc, distinguished by SHAPE as well as colour: X is solid, O is a ring.
+ *
+ * Colour alone is not enough here and that is measurable, not a matter of
+ * taste. The two player colours are Okabe-Ito, which maximises hue separation
+ * under colour-vision deficiency — but their luminance contrast against each
+ * other is 1.34:1, well under the 3:1 that WCAG 1.4.11 asks for adjacent parts
+ * of a graphic. No pair in the Okabe-Ito set clears both that bar and the bar
+ * against the board itself (yellow/blue manages 3.92:1 between pieces and then
+ * disappears on a light background at 1.27:1). So the shape carries the
+ * identity and the colour reinforces it, which is the rule anyway.
+ */
 function Disc({ value, isWinning }: { value: 'X' | 'O'; isWinning: boolean }) {
-  const color = value === 'X'
-    ? isWinning ? 'bg-red-400 shadow-red-400/40' : 'bg-red-500'
-    : isWinning ? 'bg-yellow-300 shadow-yellow-300/40' : 'bg-yellow-400'
-
+  const solid = value === 'X'
   return (
     <motion.div
-      className={cn('w-10 h-10 md:w-12 md:h-12 rounded-full', color, isWinning && 'shadow-lg')}
+      className={cn(
+        'w-10 h-10 md:w-12 md:h-12 rounded-full',
+        solid
+          ? 'bg-player-x'
+          // A ring: transparent centre with a thick border, so the two read
+          // apart in greyscale and under every CVD simulation.
+          : 'bg-transparent border-[6px] md:border-[7px] border-player-o',
+        isWinning && 'shadow-lg ring-2 ring-white/70',
+      )}
+      role="img"
+      aria-label={solid ? 'Player X disc' : 'Player O disc'}
       initial={{ y: -200, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
@@ -45,7 +64,7 @@ export function ConnectFourBoard({ board, currentTurn, winningLine, isMyTurn, is
               <motion.div
                 className={cn(
                   'w-8 h-8 rounded-full opacity-40',
-                  currentTurn === 'X' ? 'bg-red-500' : 'bg-yellow-400'
+                  currentTurn === 'X' ? 'bg-player-x' : 'bg-player-o'
                 )}
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
@@ -58,7 +77,7 @@ export function ConnectFourBoard({ board, currentTurn, winningLine, isMyTurn, is
 
       {/* Board */}
       <div
-        className="grid gap-1.5 md:gap-2 w-fit mx-auto bg-blue-800 dark:bg-blue-900 p-3 md:p-4 rounded-2xl"
+        className="grid gap-1.5 md:gap-2 w-fit mx-auto bg-blue-700 dark:bg-blue-900 p-3 md:p-4 rounded-2xl"
         style={{ gridTemplateColumns: `repeat(${C4_COLS}, minmax(0, 1fr))` }}
       >
         {Array.from({ length: C4_ROWS * C4_COLS }, (_, index) => {
@@ -75,9 +94,13 @@ export function ConnectFourBoard({ board, currentTurn, winningLine, isMyTurn, is
               disabled={!canClick(col)}
               className={cn(
                 'w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center',
-                'bg-blue-900 dark:bg-grey-900 transition-all duration-150',
+                // Neutral, not navy. The holes were blue-900 in light mode,
+                // which was fine against a red disc (2.75:1) and is not against
+                // an Okabe-Ito blue one: 2.00:1, and blue-on-navy by hue too.
+                // grey-900 clears 3:1 against both pieces (3.37 and 4.52).
+                'bg-grey-900 transition-all duration-150',
                 isWinning && 'ring-2 ring-brand',
-                canClick(col) && 'cursor-pointer hover:bg-blue-800 dark:hover:bg-grey-800',
+                canClick(col) && 'cursor-pointer hover:bg-grey-800',
                 !canClick(col) && 'cursor-default'
               )}
               aria-label={

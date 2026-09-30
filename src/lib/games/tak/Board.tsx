@@ -28,8 +28,8 @@ const DIRECTIONS: Direction[] = ['N', 'S', 'E', 'W']
 function PieceIcon({ piece, size = 'md' }: { piece: TakPiece; size?: 'sm' | 'md' }) {
   const isX = piece.owner === 'X'
   const base = isX
-    ? 'bg-rose-500 border-rose-700'
-    : 'bg-sky-400 border-sky-600'
+    ? 'bg-player-x border-player-x'
+    : 'bg-player-o border-player-o'
   const dim = size === 'sm' ? 'w-3 h-3' : 'w-7 h-7'
 
   if (piece.type === 'capstone') {
@@ -148,11 +148,11 @@ export function TakBoard({
       {/* Piece inventory */}
       <div className="flex justify-center gap-6 text-body-sm font-medium">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-md bg-rose-500 border border-rose-700" />
+          <div className="w-3 h-3 rounded-md bg-player-x border border-player-x" />
           <span className="text-text">X: {flatStones.X}F / {capstones.X}C</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-md bg-sky-400 border border-sky-600" />
+          <div className="w-3 h-3 rounded-md bg-player-o border border-player-o" />
           <span className="text-text">O: {flatStones.O}F / {capstones.O}C</span>
         </div>
       </div>

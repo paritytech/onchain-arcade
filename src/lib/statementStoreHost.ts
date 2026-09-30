@@ -29,6 +29,7 @@ import { Blake2256 } from '@polkadot-api/substrate-bindings'
 import { AccountId } from 'polkadot-api'
 
 import type { GameStatement } from '@/types/game'
+import type { VoiceStatement } from '@/types/voice'
 import { createExpiryAllocator, priorityRejectionMinimum } from './host/expiry'
 import { ensureStatementGrants, GRANT_FAILURE_COPY, type GrantOutcome } from './host/allowance'
 
@@ -112,7 +113,15 @@ function ss58FromProof(proof: SignedStatement['proof']): string | null {
   }
 }
 
-type StatementCallback = (stmt: GameStatement, signerSs58: string | null) => void
+/**
+ * Everything this transport carries. Voice signalling shares the game's topic
+ * because the two parties to a call are exactly the two players in the match —
+ * a second topic and subscription would buy nothing. They diverge at the
+ * statement store, which routes voice away from the game log.
+ */
+export type StoreStatement = GameStatement | VoiceStatement
+
+type StatementCallback = (stmt: StoreStatement, signerSs58: string | null) => void
 
 class StatementStoreHost {
   private store: HostStatementStore | null = null
@@ -256,7 +265,7 @@ class StatementStoreHost {
    * createProofAuthorized too. Beyond one retry we surface honestly rather than
    * loop — the caller re-submits on the next move anyway.
    */
-  async submit(gameStmt: GameStatement): Promise<void> {
+  async submit(gameStmt: StoreStatement): Promise<void> {
     if (this.disposed) throw new Error('[SS:Host] Disposed')
     // Wait for the attach rather than reading this.store — see the note on
     // `ready`. The caller routinely arrives before getStatementStore() has
@@ -340,10 +349,10 @@ class StatementStoreHost {
 
 function decodeSignedStatement(
   stmt: SignedStatement,
-): { gameStmt: GameStatement; signedBy: string | null } | null {
+): { gameStmt: StoreStatement; signedBy: string | null } | null {
   if (!stmt.data || stmt.data.length <= 2) return null
   try {
-    const gameStmt = JSON.parse(utf8d.decode(fromHex(stmt.data))) as GameStatement
+    const gameStmt = JSON.parse(utf8d.decode(fromHex(stmt.data))) as StoreStatement
     if (!gameStmt || typeof gameStmt.type !== 'string' || typeof gameStmt.gameId !== 'string') {
       return null
     }
