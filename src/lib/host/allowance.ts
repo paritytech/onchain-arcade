@@ -54,8 +54,13 @@ import { requestAllocation } from './allocation'
 const RESOURCES: AllocatableResource[] = [{ tag: 'StatementStoreAllowance', value: undefined }]
 const STATEMENT_RESOURCE = 'StatementStoreAllowance'
 
-/** localStorage key holding the day-slot number of the last granted allowance. */
-const ALLOWANCE_SLOT_KEY = 'onchain-arcade/statement-store-allowance/v1'
+/**
+ * localStorage key holding `<slot>:<account>` for the last granted allowance.
+ * The grant belongs to one product account: a slot-only memo let a different
+ * identity signed in later on the same device skip its own request, and every
+ * createProofAuthorized for it failed. v1 held the slot alone.
+ */
+const ALLOWANCE_SLOT_KEY = 'onchain-arcade/statement-store-allowance/v2'
 /** The pallet's allowance slot period: one day. */
 const SLOT_PERIOD_MS = 86_400_000
 /**
@@ -79,9 +84,13 @@ function currentSlot(): number {
   return Math.floor(Date.now() / SLOT_PERIOD_MS)
 }
 
-function grantedThisSlot(): boolean {
+function grantKey(slot: number, account: string): string {
+  return `${slot}:${account}`
+}
+
+function grantedThisSlot(account: string): boolean {
   try {
-    return Number(localStorage.getItem(ALLOWANCE_SLOT_KEY)) === currentSlot()
+    return localStorage.getItem(ALLOWANCE_SLOT_KEY) === grantKey(currentSlot(), account)
   } catch {
     return false // storage unavailable — fall back to the in-session memo
   }
@@ -90,9 +99,9 @@ function grantedThisSlot(): boolean {
 /** Records the slot the grant was REQUESTED under, not the slot it landed in:
  *  the round-trip is human-paced (a tap on a phone) and can cross UTC midnight,
  *  and the pallet keyed the grant under the earlier day. */
-function rememberGrant(slot: number): void {
+function rememberGrant(slot: number, account: string): void {
   try {
-    localStorage.setItem(ALLOWANCE_SLOT_KEY, String(slot))
+    localStorage.setItem(ALLOWANCE_SLOT_KEY, grantKey(slot, account))
   } catch {
     /* storage unavailable — the in-session memo still prevents re-prompting */
   }
@@ -102,6 +111,8 @@ let inFlight: Promise<GrantOutcome> | null = null
 /** Slot the memo belongs to, so a session open across the rollover re-validates
  *  instead of trusting a grant that has since lapsed. */
 let memoSlot: number | null = null
+/** Account the memo belongs to — a different identity needs its own grant. */
+let memoAccount: string | null = null
 /** Earliest time a re-armed memo may fire again. See the retry policy above. */
 let retryAfter = 0
 
@@ -109,6 +120,7 @@ let retryAfter = 0
 export function resetStatementGrants(): void {
   inFlight = null
   memoSlot = null
+  memoAccount = null
   retryAfter = 0
 }
 
@@ -146,22 +158,28 @@ export const GRANT_FAILURE_COPY: Record<Exclude<GrantOutcome, 'granted'>, string
 /**
  * Ensure this product account can sign and submit statements. Await this before
  * the first `createProofAuthorized`. Safe to call on every submit: at most one
- * host prompt per day-slot, single-flighted within the session.
+ * host prompt per day-slot per account, single-flighted within the session.
  *
  * Returns WHICH outcome, not just whether it worked. The three failures need
  * three different things from the player — approve a prompt, reload, or wait —
  * and a boolean cannot say which.
  */
-export function ensureStatementGrants(): Promise<GrantOutcome> {
-  // Drop a memo made in an earlier slot: the grant it stands for has lapsed, so
-  // the not-idempotent argument for keeping it no longer applies.
+export function ensureStatementGrants(account: string): Promise<GrantOutcome> {
+  // Drop a memo made in an earlier slot or for another account: the grant it
+  // stands for has lapsed or is not this account's, so the not-idempotent
+  // argument for keeping it no longer applies.
+  if (memoAccount !== account) {
+    inFlight = null
+    retryAfter = 0 // the backoff was about the previous account's attempt
+  }
   if (inFlight && memoSlot !== currentSlot()) inFlight = null
   if (inFlight) return inFlight
   // Inside the backoff window, report the last verdict without re-asking.
   if (Date.now() < retryAfter) return Promise.resolve('unavailable')
 
   memoSlot = currentSlot()
-  const attempt = bootstrap()
+  memoAccount = account
+  const attempt = bootstrap(account)
   inFlight = attempt.then(
     (result) => {
       if (result === 'unavailable') rearmAfterBackoff()
@@ -187,7 +205,7 @@ function rearmAfterBackoff(): void {
   })
 }
 
-async function bootstrap(): Promise<GrantOutcome> {
+async function bootstrap(account: string): Promise<GrantOutcome> {
   // Every exit announces itself. Silence is ambiguous between "not in a host",
   // "already granted this slot" and "still waiting on the host", which are
   // three very different problems that look identical in a log.
@@ -206,7 +224,7 @@ async function bootstrap(): Promise<GrantOutcome> {
 
   // Skip only the expensive, re-prompting allocation round-trip.
   const slot = currentSlot()
-  if (grantedThisSlot()) {
+  if (grantedThisSlot(account)) {
     console.log('[Host:Allowance] Allowance already granted in this slot', { slot })
     return 'granted'
   }
@@ -242,7 +260,7 @@ async function bootstrap(): Promise<GrantOutcome> {
     return 'rejected'
   }
 
-  rememberGrant(slot)
+  rememberGrant(slot, account)
   console.log('[Host:Allowance] Allowance granted', { slot })
   return 'granted'
 }
