@@ -1,19 +1,43 @@
-// Production WalletContext — dual-mode: Triangle host-first, Talisman-fallback
-// No visible "Restoring..." state — connection happens seamlessly in the background
+// WalletContext — dual-mode: Polkadot host container first, browser extension fallback.
+//
+// HOST MODE (Polkadot Desktop, Polkadot Mobile, the browser shell)
+//   The host hands the product a PRODUCT ACCOUNT: one deterministic account per
+//   (dotNsIdentifier, derivationIndex), distinct from the user's main wallet.
+//   `getProductAccountSigner` returns a PAPI signer that routes signing through
+//   the host itself, so nothing here goes near @polkadot-api/pjs-signer and its
+//   hardcoded signed-extension table — which throws on the extensions Asset Hub
+//   Next rides. This replaces the old `injectSpektrExtension()` + injectedWeb3
+//   shim, which the current SDK no longer ships.
+//
+// STANDALONE MODE (plain browser tab)
+//   Unchanged: Talisman / SubWallet / Nova via @talismn/connect-wallets.
+//
+// No visible "Restoring..." state — connection happens in the background.
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getWallets, type Wallet, type WalletAccount } from '@talismn/connect-wallets';
 import { getPolkadotSignerFromPjs } from 'polkadot-api/pjs-signer';
-import { AccountId } from 'polkadot-api';
+import { AccountId, type PolkadotSigner } from 'polkadot-api';
+import {
+  formatHostError,
+  getAccountsProvider,
+  type AccountsProvider,
+} from '@parity/product-sdk/host';
 import { getPAPIClient, ss58ToH160, disconnectPAPIClient, initChainClient, isPAPIClientReady } from '../lib/papi/client';
 // NOTE: ss58ToH160 is synchronous (local keccak256, no RPC needed)
-import { isInTriangleHost } from '../lib/triangle';
+import { isInHostContainer } from '../lib/triangle';
+import { hostErrorTag } from '../lib/host/hostError';
+import { PRODUCT_IDENTIFIER } from '../lib/host/productIdentifier';
+import { DEADLINE, withDeadline, isDeadlineError } from '../lib/deadline';
 import { initStorage, getStorage } from '../lib/storage';
-import type { ProductAccountId } from '@novasamatech/product-sdk';
+import { useNotifications } from './NotificationProvider';
 
-const DAPP_NAME = 'Tick-tack-toe';
+const DAPP_NAME = 'onchain-arcade';
 const PAS_DECIMALS = 10;
-const STORAGE_KEY_WALLET = 'Tick-tack-toe_wallet_name';
-const STORAGE_KEY_ACCOUNT = 'Tick-tack-toe_account_address';
+const STORAGE_KEY_WALLET = 'onchain_arcade_wallet_name';
+const STORAGE_KEY_ACCOUNT = 'onchain_arcade_account_address';
+
+/** Derivation index of the product account. One account per product, so 0. */
+const PRODUCT_DERIVATION_INDEX = 0;
 
 type WalletMode = 'detecting' | 'host' | 'standalone';
 
@@ -26,7 +50,7 @@ interface PolkadotWalletContextType {
   address: string | null;
   h160Address: string | null;
   accountName: string | null;
-  /** DotNS alias from getNonProductAccounts() (e.g. "pranay.23"). Null in standalone mode. */
+  /** RFC-0014 primary username from the host (the handle set in the Polkadot app). Null in standalone mode. */
   accountAlias: string | null;
   /** Display name: alias if available, otherwise accountName, otherwise truncated address. */
   displayName: string | null;
@@ -36,12 +60,14 @@ interface PolkadotWalletContextType {
   selectedWallet: Wallet | null;
   filteredEvmAccountsCount: number;
   error: string | null;
-  /** ProductAccountId for Statement Store signing via host SDK. Null in standalone mode. */
-  productAccountId: ProductAccountId | null;
+  /** True once the host has handed over a product account, i.e. the host
+   *  Statement Store transport can sign. Always false in standalone mode,
+   *  where the app signs statements with its own key. */
+  hostSigningReady: boolean;
   connect: (wallet: Wallet) => Promise<void>;
   disconnect: () => void;
   selectAccount: (account: WalletAccount) => void;
-  getSigner: () => ReturnType<typeof getPolkadotSignerFromPjs> | null;
+  getSigner: () => PolkadotSigner | null;
   getSignRaw: () => SignRawFn | null;
   getPublicKey: () => Uint8Array | null;
   refreshBalance: () => Promise<void>;
@@ -80,6 +106,30 @@ function filterSubstrateAccounts(accounts: WalletAccount[]): {
   return { substrateAccounts, evmCount };
 }
 
+// The accounts provider is async and returns null outside a host container. One
+// cached promise keeps a single provider for the page.
+//
+// Only a RESOLVED promise is kept. Caching a rejected one would retain the
+// failure for the page's lifetime, and every later caller — including the
+// reconnect handler, which exists precisely to recover — would re-reject with it.
+let accountsProviderPromise: Promise<AccountsProvider | null> | null = null;
+function accountsProvider(): Promise<AccountsProvider | null> {
+  accountsProviderPromise ??= getAccountsProvider().catch((err: unknown) => {
+    accountsProviderPromise = null;
+    throw err;
+  });
+  return accountsProviderPromise;
+}
+
+/** The provider, or a thrown error — for paths that cannot proceed without it. */
+async function requireAccountsProvider(): Promise<AccountsProvider> {
+  const provider = await accountsProvider();
+  if (!provider) throw new Error('No host accounts provider — not inside a Polkadot host.');
+  return provider;
+}
+
+const accountIdCodec = AccountId();
+
 export function PolkadotWalletProvider({ children }: { children: React.ReactNode }) {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [accounts, setAccounts] = useState<WalletAccount[]>([]);
@@ -90,11 +140,33 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
   const [mode, setMode] = useState<WalletMode>('detecting');
   const [filteredEvmAccountsCount, setFilteredEvmAccountsCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [productAccountId, setProductAccountId] = useState<ProductAccountId | null>(null);
+  const [hostSigningReady, setHostSigningReady] = useState(false);
   const [accountAlias, setAccountAlias] = useState<string | null>(null);
+  const [hostPublicKey, setHostPublicKey] = useState<Uint8Array | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  /** PAPI signer for the product account — host mode only. */
+  const hostSignerRef = useRef<PolkadotSigner | null>(null);
+  const connectionSubRef = useRef<{ unsubscribe: () => void } | null>(null);
 
   const installedWallets = getWallets().filter(w => w.installed);
+  const { addNotification } = useNotifications();
+
+  // `error` had no renderer: WalletModal keeps its own local error state and
+  // never reads the context's, and in host mode the modal auto-closes anyway —
+  // so a host that never hands over an account, or one waiting for sign-in, was
+  // a silently dead app. NotificationProvider wraps WalletProvider (see the
+  // provider order in App.tsx), so this is the surface that always exists.
+  // Each distinct message is announced once; a repeat of the same one is not.
+  const reportedErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!error) {
+      reportedErrorRef.current = null;
+      return;
+    }
+    if (reportedErrorRef.current === error) return;
+    reportedErrorRef.current = error;
+    addNotification('error', error, 10_000);
+  }, [error, addNotification]);
 
   const saveConnectionState = useCallback((walletName: string, address: string) => {
     try {
@@ -123,7 +195,9 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  // Fetch balance for an SS58 address (only when chain client is ready)
+  // Fetch balance for an SS58 address. Gated on isPAPIClientReady(): inside a
+  // host that does not serve the configured chain there is no client at all,
+  // which is a "no balance" state, not an error worth surfacing to the player.
   const fetchBalance = useCallback(async (ss58Address: string) => {
     if (!isPAPIClientReady()) return;
     try {
@@ -132,7 +206,6 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
       setBalance(accountInfo.data.free);
     } catch (error) {
       console.error('[Wallet] Error fetching balance:', error);
-      setError(error instanceof Error ? error.message : 'Failed to fetch balance');
       setBalance(0n);
     }
   }, []);
@@ -189,16 +262,20 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
     clearConnectionState();
   }, [clearConnectionState]);
 
-  // Select a different account
+  // Select a different account. In host mode the product account is
+  // deterministic — there is exactly one, so this is a no-op there.
   const selectAccount = useCallback((account: WalletAccount) => {
+    if (mode === 'host') return;
     setSelectedAccount(account);
     if (wallet) {
       saveConnectionState(wallet.extensionName, account.address);
     }
-  }, [wallet, saveConnectionState]);
+  }, [wallet, mode, saveConnectionState]);
 
-  // Get PAPI signer from wallet extension (works for both Spektr and Talisman/SubWallet)
+  // Get the PAPI signer. In host mode the host signs the full extrinsic itself;
+  // in standalone mode the browser extension does.
   const getSigner = useCallback(() => {
+    if (hostSignerRef.current) return hostSignerRef.current;
     if (!wallet?.extension?.signer || !selectedAccount) return null;
     return getPolkadotSignerFromPjs(
       selectedAccount.address,
@@ -207,21 +284,25 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
     );
   }, [wallet, selectedAccount]);
 
-  // Get raw signing function for Statement Store submissions
+  // Raw signing, for the standalone Statement Store transport only. In host
+  // mode statements are signed by the host via createProofAuthorized, which
+  // needs no key material here — hence null.
   const getSignRaw = useCallback((): SignRawFn | null => {
+    if (mode === 'host') return null;
     if (!wallet?.extension?.signer?.signRaw) return null;
     return wallet.extension.signer.signRaw;
-  }, [wallet]);
+  }, [wallet, mode]);
 
   // Get the 32-byte public key for the selected account
   const getPublicKey = useCallback((): Uint8Array | null => {
+    if (hostPublicKey) return hostPublicKey;
     if (!selectedAccount) return null;
     try {
-      return AccountId().enc(selectedAccount.address);
+      return accountIdCodec.enc(selectedAccount.address);
     } catch {
       return null;
     }
-  }, [selectedAccount]);
+  }, [selectedAccount, hostPublicKey]);
 
   // Format balance (10 decimals for PAS)
   const formatBalance = useCallback((amount?: bigint): string => {
@@ -291,124 +372,209 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  // Initialize: Triangle host auto-connect via Spektr extension injection
-  const initHostMode = useCallback(async () => {
-    try {
-      const { injectSpektrExtension } = await import('@novasamatech/product-sdk');
+  /**
+   * Fetch the product account for this product identifier and install a signer.
+   * Returns true if an account was applied, false if the user must still sign in
+   * on the host.
+   */
+  const applyProductAccount = useCallback(async (): Promise<boolean> => {
+    // Bounded: a wedged host bridge answers nothing, and an unbounded await
+    // leaves the UI waiting forever.
+    //
+    // hostDialog, not read: the host does not derive the product subtree key
+    // locally. The first call for a product opens a host dialog and waits for
+    // the user to confirm — on mobile, in the Polkadot app on their paired
+    // phone. That round trip is human-paced. Later calls resolve from
+    // persistence with no UI.
+    //
+    // Promise.resolve lifts the neverthrow ResultAsync (a PromiseLike, not a
+    // Promise) into the shape withDeadline takes.
+    const provider = await requireAccountsProvider();
+    const result = await withDeadline(
+      Promise.resolve(provider.getProductAccount(PRODUCT_IDENTIFIER, PRODUCT_DERIVATION_INDEX)),
+      DEADLINE.hostDialog,
+      'getProductAccount',
+    );
 
-      // injectSpektrExtension() injects into window.injectedWeb3 as "spektr"
-      const injected = await injectSpektrExtension();
-      if (!injected) {
-        console.error('[Wallet] Spektr injection failed — falling back to standalone');
-        setMode('standalone');
-        return;
-      }
-
-      // @talismn/connect-wallets doesn't know about "spektr" — access injectedWeb3 directly
-      const injectedWeb3 = (window as any).injectedWeb3;
-      const spektrEntry = injectedWeb3?.['spektr'];
-      if (!spektrEntry) {
-        console.error('[Wallet] Spektr not found in injectedWeb3 — falling back to standalone');
-        setMode('standalone');
-        return;
-      }
-
-      const spektrExt = typeof spektrEntry.enable === 'function'
-        ? await spektrEntry.enable(DAPP_NAME)
-        : spektrEntry;
-
-      const rawAccounts = await spektrExt.accounts.get();
-      const walletAccounts: WalletAccount[] = rawAccounts.map((a: any) => ({
-        address: a.address,
-        name: a.name || 'Spektr Account',
-        source: 'spektr',
-      }));
-      const { substrateAccounts, evmCount } = filterSubstrateAccounts(walletAccounts);
-      setFilteredEvmAccountsCount(evmCount);
-
-      if (substrateAccounts.length === 0) {
-        console.error('[Wallet] No Substrate accounts from Spektr — falling back to standalone');
-        setMode('standalone');
-        return;
-      }
-
-      // Create a wallet shim so getSigner() works with the Spektr extension
-      const spektrWalletShim = {
-        extensionName: 'spektr',
-        installed: true,
-        extension: spektrExt,
-        enable: async () => {},
-        getAccounts: async () => walletAccounts,
-        subscribeAccounts: (cb: any) => {
-          spektrExt.accounts.subscribe?.((accs: any[]) => {
-            cb(accs.map((a: any) => ({
-              address: a.address,
-              name: a.name || 'Spektr Account',
-              source: 'spektr',
-            })));
-          });
-          return () => {};
-        },
-      } as unknown as Wallet;
-
-      setWallet(spektrWalletShim);
-      setAccounts(substrateAccounts);
-      setSelectedAccount(substrateAccounts[0]);
-      // Non-product account pattern (from ignite's toProductAccount): ['', 0]
-      setProductAccountId(['', 0] as ProductAccountId);
-      setMode('host');
-      console.log('[Wallet] Connected via Triangle host (Spektr)');
-
-      // Resolve DotNS alias via createAccountsProvider
-      try {
-        const { createAccountsProvider } = await import('@novasamatech/product-sdk');
-        const accountsProvider = createAccountsProvider();
-        const result = accountsProvider.getNonProductAccounts();
-        const accounts = await result.match(
-          (accs: { publicKey: Uint8Array; name: string | undefined }[]) => accs,
-          () => [] as { publicKey: Uint8Array; name: string | undefined }[],
-        );
-        if (accounts.length > 0 && accounts[0].name) {
-          setAccountAlias(accounts[0].name);
-          console.log('[Wallet] DotNS alias:', accounts[0].name);
-        }
-      } catch (err) {
-        console.warn('[Wallet] Could not resolve DotNS alias:', err);
-      }
-    } catch (error) {
-      console.error('[Wallet] Host mode init failed, falling back to standalone:', error);
-      setError(error instanceof Error ? error.message : 'Host wallet initialization failed');
-      setMode('standalone');
+    if (result.isErr()) {
+      const tag = hostErrorTag(result.error);
+      // Not signed in yet is not a failure — the UI waits for sign-in.
+      if (tag === 'NotConnected') return false;
+      throw new Error(
+        `getProductAccount(${PRODUCT_IDENTIFIER}) failed: ${tag ?? formatHostError(result.error)}`,
+      );
     }
+
+    const publicKey = result.value.publicKey;
+    const ss58 = accountIdCodec.dec(publicKey);
+
+    // Resolve the user's RFC-0014 primary username (the handle set in the
+    // Polkadot mobile app) for display. Raced against a short timeout so a slow
+    // host bridge cannot block sign-in over a cosmetic field.
+    let alias: string | null = null;
+    try {
+      const userId = await Promise.race([
+        Promise.resolve(provider.getUserId()),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('getUserId timed out')), 3_000),
+        ),
+      ]);
+      if (userId.isOk() && userId.value.primaryUsername) {
+        alias = userId.value.primaryUsername;
+      }
+    } catch (err) {
+      console.warn('[Wallet] getUserId failed — falling back to the product identifier:', err);
+    }
+
+    const account: WalletAccount = {
+      address: ss58,
+      name: alias ?? PRODUCT_IDENTIFIER,
+      source: 'polkadot-host',
+    };
+
+    // The host signs the full extrinsic itself, so nothing here goes near
+    // @polkadot-api/pjs-signer and its hardcoded signed-extension table.
+    hostSignerRef.current = provider.getProductAccountSigner({
+      publicKey,
+      dotNsIdentifier: PRODUCT_IDENTIFIER,
+      derivationIndex: PRODUCT_DERIVATION_INDEX,
+    });
+
+    setHostPublicKey(publicKey);
+    setAccountAlias(alias);
+    setAccounts([account]);
+    setSelectedAccount(account);
+    setHostSigningReady(true);
+    setError(null);
+    console.log('[Wallet] Connected as the product account', { identifier: PRODUCT_IDENTIFIER });
+    return true;
   }, []);
 
-  // Main init effect — detect wallet mode, defer chain client to when wallet connects
+  /** Host mode bootstrap: product account + reconnect subscription. */
+  const initHostMode = useCallback(async (cancelled: () => boolean) => {
+    try {
+      const signedIn = await applyProductAccount();
+      if (cancelled()) return;
+      if (!signedIn) {
+        // Not a failure — the host has no active session yet. Say so, because
+        // in host mode the wallet modal auto-closes and there is no in-app
+        // Connect button: without this the player sees a dead "not connected"
+        // state with nothing to act on. The subscription below picks the
+        // account up as soon as they sign in, no reload needed.
+        console.log('[Wallet] No active host session — waiting for sign-in');
+        setError('Sign in to Polkadot on the host to play. This clears on its own once you do.');
+      }
+
+      // Re-fetch the product account when the host reports a new connection.
+      const provider = await requireAccountsProvider();
+      const sub = provider.subscribeAccountConnectionStatus(async (status) => {
+        if (status === 'Disconnected') {
+          hostSignerRef.current = null;
+          setHostSigningReady(false);
+          setSelectedAccount(null);
+          setAccounts([]);
+        } else if (status === 'Connected') {
+          try {
+            if (await applyProductAccount()) setError(null);
+          } catch (err) {
+            console.error('[Wallet] Product account read failed on reconnect:', err);
+          }
+        }
+      });
+      // An interrupt is the bridge dying under us, not a clean sign-out. It
+      // used to clear only hostSigningReady, which left `selectedAccount` set —
+      // so `isConnected` stayed true, the header kept showing an account that
+      // could no longer sign, and the statement transport deferred forever with
+      // nothing on screen to say why. Treat it as a disconnect and say so.
+      sub.onInterrupt(() => {
+        if (cancelled()) return;
+        hostSignerRef.current = null;
+        setHostSigningReady(false);
+        setSelectedAccount(null);
+        setAccounts([]);
+        setError(
+          'Lost the connection to the host. Reload to reconnect — moves cannot be published until you do.',
+        );
+      });
+      if (cancelled()) {
+        // Unmounted (or StrictMode re-ran the effect) while we were awaiting.
+        // Nothing will ever read this subscription, so drop it here rather than
+        // leaking it past the cleanup that already ran.
+        sub.unsubscribe();
+        return;
+      }
+      connectionSubRef.current = sub;
+    } catch (err) {
+      if (cancelled()) return;
+      // `detail` is its own field, not only part of `err`: a host error often
+      // carries its reason in a tag the error message drops.
+      const detail = hostErrorTag(err) ?? (err instanceof Error ? err.message : formatHostError(err));
+      console.error('[Wallet] Host mode init failed:', detail, err);
+      setError(
+        isDeadlineError(err)
+          ? 'The host never handed over an account. If the Polkadot app on your phone is showing a confirmation request, answer it and reload.'
+          : detail,
+      );
+    }
+  }, [applyProductAccount]);
+
+  // Main init effect — pick the mode, then bootstrap it.
+  //
+  // React.StrictMode (src/main.tsx) runs this twice in dev. Without the
+  // cancellation flag the second run raced the first: two concurrent
+  // getProductAccount calls — each of which can open a host confirmation
+  // dialog — and the second subscription overwrote the first in the ref
+  // without unsubscribing it. The cleanup lives HERE rather than in a
+  // separate []-dep effect, because that one fired before the awaits below
+  // had assigned anything for it to clean up.
   useEffect(() => {
+    let disposed = false;
+    const cancelled = () => disposed;
+
     const init = async () => {
       // Storage init is synchronous (no-op), but call it to satisfy the contract
       await initStorage();
 
-      // Determine mode immediately (sync check)
-      const hostMode = isInTriangleHost();
+      // Authoritative: completes the SDK handshake rather than guessing from
+      // window markers, so a framed page with no working bridge falls through
+      // to standalone instead of hanging on a host that is not there.
+      const inHost = await isInHostContainer();
 
-      if (hostMode) {
-        // Host mode: init chain client + Spektr in parallel (host needs chain for Spektr)
-        const chainClientPromise = initChainClient().catch((err) =>
-          console.error('[Wallet] Chain client init failed:', err)
-        );
-        await Promise.all([chainClientPromise, initHostMode()]);
+      if (inHost) {
+        setMode('host');
+        setIsConnecting(true);
+        try {
+          // The chain client and the product account are independent — the host
+          // owns both connections, and neither blocks the other.
+          await Promise.all([
+            initChainClient().catch((err) =>
+              console.error('[Wallet] Chain client init failed:', err)
+            ),
+            initHostMode(cancelled),
+          ]);
+        } finally {
+          if (!cancelled()) setIsConnecting(false);
+        }
       } else {
-        // Standalone mode: show Connect Wallet immediately, restore wallet state
-        // Chain client is deferred until wallet actually connects (avoids WebSocket errors on load)
+        // Standalone: show Connect Wallet immediately, restore wallet state.
+        // The chain client is deferred until a wallet actually connects, which
+        // avoids WebSocket errors on load.
         setMode('standalone');
         await restoreConnection();
       }
     };
 
     init();
+    return () => {
+      disposed = true;
+      connectionSubRef.current?.unsubscribe();
+      connectionSubRef.current = null;
+    };
   }, [initHostMode, restoreConnection]);
 
-  // Cleanup on unmount
+  // Teardown that must NOT run on a StrictMode remount: the wallet-extension
+  // subscription and the shared PAPI client outlive a re-render, and
+  // destroying the client here would leave every later chain read throwing.
   useEffect(() => {
     return () => {
       if (unsubscribeRef.current) {
@@ -424,7 +590,6 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
 
   const accountName = selectedAccount?.name || null;
   const displayName = accountAlias || accountName || truncatedAddress;
-
   return (
     <PolkadotWalletContext.Provider
       value={{
@@ -442,7 +607,7 @@ export function PolkadotWalletProvider({ children }: { children: React.ReactNode
         selectedWallet: wallet,
         filteredEvmAccountsCount,
         error,
-        productAccountId,
+        hostSigningReady,
         connect,
         disconnect,
         selectAccount,

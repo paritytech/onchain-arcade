@@ -113,6 +113,7 @@ export function deriveMancala(gameId: string, stmts: GameStatement[]): DerivedMa
     status,
     result,
     moveCount,
+    vsComputer: create.vsComputer ?? false,
     createdAt: create.timestamp,
     updatedAt,
   }

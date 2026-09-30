@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { usePolkadotWallet } from '@/contexts/WalletContext'
 import { useNotifications } from '@/contexts/NotificationProvider'
 import { statementStore, type DerivedGame } from '@/lib/statementStore'
+import { statementStoreHost } from '@/lib/statementStoreHost'
 import type { GameStatement, PlayerSymbol, GameType, GridSize } from '@/types/game'
 import { generateGameId } from '@/types/game'
 
@@ -13,12 +14,25 @@ export type MovePayload =
   | { heap: number; count: number }
   | { edge: string }
   | { pit: number }
+  | { ghostLetter: string }
+  | { ghostChallenge: true }
+  | { hackenbushEdge: number }
+  | { entropyPlace: number }
+  | { entropySlide: { from: number; to: number } }
+  | { entropyPass: true }
+  | { blokusMove: { pieceId: number; position: number; rotation: number; flip: boolean } }
+  | { blokusPass: true }
+  | { takPlace: { position: number; pieceType: 'flat' | 'wall' | 'capstone' } }
+  | { takMove: { from: number; direction: 'N' | 'S' | 'E' | 'W'; drops: number[] } }
+  | { emojiClue: string }
+  | { guess: string }
+  | { skipRound: true }
 
 interface GameContextType {
   games: DerivedGame[]
   activeGame: DerivedGame | null
   isLoading: boolean
-  createGame: (gameType?: GameType, options?: { gridSize?: GridSize; nimConfig?: number[] }) => Promise<string | null>
+  createGame: (gameType?: GameType, options?: { gridSize?: GridSize; nimConfig?: number[]; vsComputer?: boolean; maxPlayers?: number }) => Promise<string | null>
   joinGame: (gameId: string, hostAddress?: string, gameType?: GameType) => Promise<boolean>
   makeMove: (gameId: string, move: MovePayload) => Promise<boolean>
   loadGame: (gameId: string) => void
@@ -43,13 +57,32 @@ function useStatementStoreGames(): DerivedGame[] {
 }
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
-  const { isConnected, address, productAccountId, displayName } = usePolkadotWallet()
+  const { address, mode, hostSigningReady, displayName } = usePolkadotWallet()
   const { addNotification } = useNotifications()
   const games = useStatementStoreGames()
   const [activeGameId, setActiveGameId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   const activeGame = activeGameId ? statementStore.getGame(activeGameId) : null
+
+  // Surface transport failures. Both channels existed but were wired to
+  // nothing, so "the host serves no Statement Store" and "your move was never
+  // published" reached the console and stopped there — the player saw a game
+  // that looked fine and an opponent who never moved.
+  useEffect(() => {
+    statementStoreHost.onFatalError = (err) => addNotification('error', err.message)
+    statementStore.onSubmitError = (_err, stmt) => {
+      const what = stmt.type === 'make_move' ? 'move' : 'game'
+      addNotification(
+        'error',
+        `Your ${what} could not be published, so your opponent will not see it. Check your connection and try again.`,
+      )
+    }
+    return () => {
+      statementStoreHost.onFatalError = undefined
+      statementStore.onSubmitError = undefined
+    }
+  }, [addNotification])
 
   const prevMoveCountRef = React.useRef<number>(0)
   useEffect(() => {
@@ -71,16 +104,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const createGame = useCallback(async (
     gameType: GameType = 'tic-tac-toe',
-    options?: { gridSize?: GridSize; nimConfig?: number[] }
+    options?: { gridSize?: GridSize; nimConfig?: number[]; vsComputer?: boolean; maxPlayers?: number }
   ): Promise<string | null> => {
-    if (!isConnected || !address) {
+    if (!address) {
       addNotification('error', 'Connect your wallet to create a game')
       return null
     }
 
     setIsLoading(true)
     try {
-      statementStore.connectRpc(productAccountId)
+      statementStore.connectRpc(mode, hostSigningReady)
 
       const gameId = generateGameId()
       const stmt: GameStatement = {
@@ -91,13 +124,28 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         gameType: gameType !== 'tic-tac-toe' ? gameType : undefined,
         gridSize: options?.gridSize && options.gridSize !== 3 ? options.gridSize : undefined,
         nimConfig: options?.nimConfig,
+        vsComputer: options?.vsComputer || undefined,
+        maxPlayers: options?.maxPlayers,
         timestamp: Date.now(),
       }
 
       statementStore.applyAndSubmit(stmt)
+
+      // Auto-join as computer opponent
+      if (options?.vsComputer) {
+        const joinStmt: GameStatement = {
+          type: 'join_game',
+          gameId,
+          playerO: 'computer',
+          playerOName: 'Computer',
+          timestamp: Date.now(),
+        }
+        statementStore.applyLocal(joinStmt)
+      }
+
       setActiveGameId(gameId)
       prevMoveCountRef.current = 0
-      addNotification('success', `Game created! Share code: ${gameId}`)
+      addNotification('success', options?.vsComputer ? 'Game started vs Computer!' : `Game created! Share code: ${gameId}`)
       return gameId
     } catch (err) {
       console.error('[Game] Create failed:', err)
@@ -106,22 +154,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [isConnected, address, productAccountId, displayName, addNotification])
+  }, [address, mode, hostSigningReady, displayName, addNotification])
 
   const joinGame = useCallback(async (gameId: string, hostAddress?: string, gameType?: GameType): Promise<boolean> => {
-    if (!isConnected || !address) {
-      addNotification('error', 'Connect your wallet to join a game')
+    if (!address) {
+      addNotification('error', 'Wallet still connecting, please try again')
       return false
     }
 
     setIsLoading(true)
     try {
-      statementStore.connectRpc(productAccountId)
+      statementStore.connectRpc(mode, hostSigningReady)
 
       const normalizedId = gameId.trim().toUpperCase()
       let game = statementStore.getGame(normalizedId)
 
-      // If game not found locally, bootstrap from URL params (gameType + host)
       if (!game && hostAddress) {
         if (hostAddress === address) {
           addNotification('error', 'You cannot join your own game')
@@ -170,10 +217,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [isConnected, address, productAccountId, displayName, addNotification])
+  }, [address, mode, hostSigningReady, displayName, addNotification])
 
   const makeMove = useCallback(async (gameId: string, move: MovePayload): Promise<boolean> => {
-    if (!isConnected || !address) return false
+    if (!address) return false
 
     const game = statementStore.getGame(gameId)
     if (!game) return false
@@ -195,6 +242,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       ...('heap' in move ? { nimMove: { heap: move.heap, count: move.count } } : {}),
       ...('edge' in move ? { edge: move.edge } : {}),
       ...('pit' in move ? { pit: move.pit } : {}),
+      ...('ghostLetter' in move ? { ghostLetter: move.ghostLetter } : {}),
+      ...('ghostChallenge' in move ? { ghostChallenge: true } : {}),
+      ...('hackenbushEdge' in move ? { hackenbushEdge: move.hackenbushEdge } : {}),
+      ...('entropyPlace' in move ? { entropyPlace: move.entropyPlace } : {}),
+      ...('entropySlide' in move ? { entropySlide: move.entropySlide } : {}),
+      ...('entropyPass' in move ? { entropyPass: true } : {}),
+      ...('blokusMove' in move ? { blokusMove: move.blokusMove } : {}),
+      ...('blokusPass' in move ? { blokusPass: true } : {}),
+      ...('takPlace' in move ? { takPlace: move.takPlace } : {}),
+      ...('takMove' in move ? { takMove: move.takMove } : {}),
+      ...('emojiClue' in move ? { emojiClue: move.emojiClue } : {}),
+      ...('guess' in move ? { guess: move.guess } : {}),
+      ...('skipRound' in move ? { skipRound: true } : {}),
       timestamp: Date.now(),
     }
 
@@ -211,14 +271,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
 
     return true
-  }, [isConnected, address, addNotification])
+  }, [address, addNotification])
 
   const loadGame = useCallback((gameId: string) => {
     const normalizedId = gameId.toUpperCase()
     setActiveGameId(normalizedId)
     prevMoveCountRef.current = statementStore.getGame(normalizedId)?.moveCount ?? 0
-    statementStore.connectRpc(productAccountId)
-  }, [productAccountId])
+    statementStore.connectRpc(mode, hostSigningReady)
+  }, [mode, hostSigningReady])
 
   const leaveGame = useCallback(() => {
     setActiveGameId(null)

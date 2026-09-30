@@ -1,0 +1,98 @@
+[
+  {
+    "pattern": "recovery-success",
+    "phase": "FRONTEND",
+    "approach": "fix-in-place",
+    "success": true,
+    "timestamp": 1774975889125,
+    "agentId": "frontend-agent"
+  },
+  {
+    "pattern": "recovery-success",
+    "phase": "FRONTEND",
+    "approach": "fix-in-place",
+    "success": true,
+    "timestamp": 1774975894341,
+    "agentId": "frontend-agent"
+  },
+  {
+    "pattern": "recovery-success",
+    "phase": "FRONTEND",
+    "approach": "fix-in-place",
+    "success": true,
+    "timestamp": 1774976250495,
+    "agentId": "frontend-agent"
+  },
+  {
+    "pattern": "recovery-success",
+    "phase": "FRONTEND",
+    "approach": "fix-in-place",
+    "success": true,
+    "timestamp": 1774976256318,
+    "agentId": "frontend-agent"
+  },
+  {
+    "pattern": "recovery-success",
+    "phase": "FRONTEND",
+    "approach": "fix-in-place",
+    "success": true,
+    "timestamp": 1774976387702,
+    "agentId": "frontend-agent"
+  },
+  {
+    "pattern": "recovery-success",
+    "phase": "FRONTEND",
+    "approach": "fix-in-place",
+    "success": true,
+    "timestamp": 1774976392648,
+    "agentId": "frontend-agent"
+  },
+  {
+    "pattern": "recovery-success",
+    "phase": "FRONTEND",
+    "approach": "fix-in-place",
+    "success": true,
+    "timestamp": 1774977512905,
+    "agentId": "frontend-agent"
+  },
+  {
+    "pattern": "recovery-success",
+    "phase": "FRONTEND",
+    "approach": "fix-in-place",
+    "success": true,
+    "timestamp": 1774977857824,
+    "agentId": "frontend-agent"
+  },
+  {
+    "pattern": "recovery-success",
+    "phase": "INTEGRATION",
+    "approach": "fix-in-place",
+    "success": true,
+    "timestamp": 1774978224102,
+    "agentId": "integration-agent"
+  },
+  {
+    "pattern": "recovery-success",
+    "phase": "INTEGRATION",
+    "approach": "fix-in-place",
+    "success": true,
+    "timestamp": 1774978320651,
+    "agentId": "integration-agent"
+  },
+  {
+    "pattern": "recovery-success",
+    "phase": "INTEGRATION",
+    "approach": "fix-in-place",
+    "success": true,
+    "timestamp": 1774978572362,
+    "agentId": "integration-agent"
+  },
+  {
+    "pattern": "recovery-success",
+    "phase": "INTEGRATION",
+    "approach": "fix-in-place",
+    "success": true,
+    "timestamp": 1774978703654,
+    "agentId": "integration-agent"
+  }
+]

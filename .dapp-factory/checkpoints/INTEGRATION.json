@@ -1,0 +1,47 @@
+{
+  "agentId": "integration-agent-retry-1774978270140",
+  "agentType": "phase",
+  "phase": "INTEGRATION",
+  "status": "completed",
+  "startTime": 1774978270140,
+  "output": {
+    "filesCreated": [],
+    "filesModified": [],
+    "filesDeleted": [],
+    "commandsRun": [],
+    "errors": []
+  },
+  "handoff": {
+    "to": [
+      "TESTING"
+    ],
+    "message": "Integration Agent completed with structured handoff",
+    "artifacts": {
+      "filesCreated": [],
+      "hooks": [
+        "useContractPAPI",
+        "useOnBlock"
+      ],
+      "buildStatus": "passed",
+      "transactionFlows": [
+        "createGame",
+        "joinGame",
+        "makeMove",
+        "shareGameCode",
+        "walletBalanceRefresh"
+      ]
+    },
+    "validation": {
+      "valid": true,
+      "warnings": [],
+      "usedFallback": false
+    }
+  },
+  "metrics": {
+    "linesOfCode": 0,
+    "components": 0,
+    "dependencies": []
+  },
+  "endTime": 1774978572363,
+  "duration": 302223
+}

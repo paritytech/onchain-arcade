@@ -111,7 +111,9 @@ export function NimBoard({ heaps, isMyTurn, isPlayable, onMove }: NimBoardProps)
             disabled={selectedHeap == null || selectedCount === 0}
             leftIcon={<Check className="w-4 h-4" />}
           >
-            Remove {selectedCount} from Heap {selectedHeap != null ? selectedHeap + 1 : '?'}
+            {selectedHeap != null && selectedCount > 0
+              ? `Remove ${selectedCount} from Heap ${selectedHeap + 1}`
+              : 'Select tokens to remove'}
           </Button>
         </div>
       )}

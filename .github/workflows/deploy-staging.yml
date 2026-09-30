@@ -1,0 +1,24 @@
+name: Deploy branch to DotNS (staging)
+
+# Manual branch deploy to onchain-arcade-stg.paseo. Actions → this workflow →
+# "Run workflow" → pick the branch. One shared slot: a second run overwrites it.
+# The stem is 18 chars (>= 9 → NoStatus), so no proof of personhood; the first
+# run registers it and locks a refundable deposit (DOTNS_MNEMONIC needs PAS).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never cancel mid-publish: it can leave the name at a half-uploaded CID.
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    uses: ./.github/workflows/deploy-dotns.yml
+    with:
+      domain: onchain-arcade-stg.paseo
+    secrets: inherit

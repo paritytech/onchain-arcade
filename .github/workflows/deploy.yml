@@ -1,53 +1,26 @@
 name: Deploy to DotNS
 
+# Production: every push to master republishes onchain-arcade.paseo. Manual runs
+# stay available because Bulletin content expires after ~2 weeks; a quiet period
+# otherwise leaves the name pointing at content the chain no longer holds.
+# For a branch deploy, use deploy-staging.yml.
+
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
-    inputs:
-      skip-cache:
-        description: 'Force redeploy'
-        type: boolean
-        default: false
 
 permissions:
   contents: read
-  statuses: write
-  id-token: write
-  pull-requests: write
+
+concurrency:
+  # Never cancel mid-publish: back-to-back merges queue instead.
+  group: deploy-production
+  cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install and build
-        run: |
-          bun install
-          bun run build
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: site
-          path: dist/
-          retention-days: 1
-
-  deploy:
-    name: Deploy
-    needs: build
-    uses: paritytech/dotns-sdk/.github/workflows/deploy.yml@main
+  production:
+    uses: ./.github/workflows/deploy-dotns.yml
     with:
-      basename: tick-tack-toe
-      artifact-name: site
-      mode: production
-      register-base: true
-      skip-cache: ${{ inputs.skip-cache || false }}
-      max-retries: 3
-    secrets:
-      dotns-mnemonic: ${{ secrets.DOTNS_MNEMONIC }}
+      domain: onchain-arcade.paseo
+    secrets: inherit

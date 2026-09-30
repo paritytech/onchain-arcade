@@ -1,0 +1,26 @@
+{
+  "agentId": "fast-init",
+  "agentType": "phase",
+  "phase": "SETUP",
+  "status": "completed",
+  "startTime": 1774976902302,
+  "output": {
+    "filesCreated": [],
+    "filesModified": [],
+    "filesDeleted": [],
+    "commandsRun": [
+      "git init",
+      "npm install",
+      "npx tsc --noEmit"
+    ],
+    "errors": []
+  },
+  "handoff": {
+    "to": [],
+    "message": "",
+    "artifacts": {}
+  },
+  "metrics": {},
+  "endTime": 1774976902303,
+  "duration": 1
+}

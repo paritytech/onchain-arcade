@@ -1,0 +1,37 @@
+{
+  "agentId": "frontend-agent-fix-1774977435047",
+  "agentType": "phase",
+  "phase": "FRONTEND",
+  "status": "completed",
+  "startTime": 1774977435047,
+  "output": {
+    "filesCreated": [],
+    "filesModified": [],
+    "filesDeleted": [],
+    "commandsRun": [],
+    "errors": []
+  },
+  "handoff": {
+    "to": [
+      "CONTRACTS"
+    ],
+    "message": "Frontend Agent completed successfully",
+    "artifacts": {},
+    "validation": {
+      "valid": false,
+      "warnings": [
+        "Missing required field \"filesCreated\" (List of files created)",
+        "Missing required field \"components\" (React components created)",
+        "Missing required field \"routes\" (Application routes)"
+      ],
+      "usedFallback": false
+    }
+  },
+  "metrics": {
+    "linesOfCode": 0,
+    "components": 0,
+    "dependencies": []
+  },
+  "endTime": 1774977512907,
+  "duration": 77860
+}

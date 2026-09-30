@@ -14,7 +14,7 @@ import {
   type StatementFields,
 } from './scale'
 import { signStatement } from './statementSigner'
-import type { GameStatement } from '@/types/game'
+import type { StoreStatement } from './statementStoreHost'
 
 const STATEMENT_STORE_URL =
   import.meta.env.VITE_STATEMENT_STORE_URL || 'wss://pop3-testnet.parity-lab.parity.io/people'
@@ -37,20 +37,20 @@ export function gameIdToTopic(gameId: string): Uint8Array {
 }
 
 /** Encode a GameStatement as bytes for the Statement Store data field. */
-function encodeGameStatement(stmt: GameStatement): Uint8Array {
+function encodeGameStatement(stmt: StoreStatement): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(stmt))
 }
 
 /** Decode a GameStatement from Statement Store data field bytes. */
-function decodeGameStatement(data: Uint8Array): GameStatement | null {
+function decodeGameStatement(data: Uint8Array): StoreStatement | null {
   try {
-    return JSON.parse(new TextDecoder().decode(data)) as GameStatement
+    return JSON.parse(new TextDecoder().decode(data)) as StoreStatement
   } catch {
     return null
   }
 }
 
-type StatementCallback = (stmt: GameStatement, signer: Uint8Array | null) => void
+type StatementCallback = (stmt: StoreStatement, signer: Uint8Array | null) => void
 type PendingRequest = {
   resolve: (result: unknown) => void
   reject: (err: Error) => void
@@ -319,7 +319,7 @@ class StatementStoreRpc {
    * Submit a game statement to the Statement Store.
    * Signs with an ephemeral Ed25519 keypair.
    */
-  async submit(gameStmt: GameStatement): Promise<void> {
+  async submit(gameStmt: StoreStatement): Promise<void> {
     console.log(`[SS] → Submitting: ${gameStmt.type} gameId=${gameStmt.gameId}`)
 
     const gameTopic = gameIdToTopic(gameStmt.gameId)

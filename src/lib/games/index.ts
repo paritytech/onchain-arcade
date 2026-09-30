@@ -6,6 +6,12 @@ import { deriveNim } from './nim-game'
 import { deriveDotsAndBoxes } from './dots-and-boxes'
 import { deriveMancala } from './mancala'
 import { deriveReversi } from './reversi'
+import { deriveEntropy } from './entropy'
+import { deriveGhost } from './ghost'
+import { deriveHackenbush } from './hackenbush'
+import { deriveBlokusDuo } from './blokus-duo'
+import { deriveTak } from './tak'
+import { deriveEmojiPictionary } from './emoji-pictionary'
 
 type DeriverFn = (gameId: string, stmts: GameStatement[]) => DerivedGame | null
 
@@ -16,6 +22,12 @@ const derivers: Partial<Record<GameType, DeriverFn>> = {
   'dots-and-boxes': deriveDotsAndBoxes,
   'mancala': deriveMancala,
   'reversi': deriveReversi,
+  'entropy': deriveEntropy,
+  'ghost': deriveGhost,
+  'hackenbush': deriveHackenbush,
+  'blokus-duo': deriveBlokusDuo,
+  'tak': deriveTak,
+  'emoji-pictionary': deriveEmojiPictionary,
 }
 
 export function deriveGame(gameId: string, stmts: GameStatement[]): DerivedGame | null {

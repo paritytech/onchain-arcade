@@ -52,6 +52,7 @@ export function deriveNim(gameId: string, stmts: GameStatement[]): DerivedNim | 
     status,
     result,
     moveCount,
+    vsComputer: create.vsComputer ?? false,
     createdAt: create.timestamp,
     updatedAt,
   }

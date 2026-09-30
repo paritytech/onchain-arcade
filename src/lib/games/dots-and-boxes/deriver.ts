@@ -107,6 +107,7 @@ export function deriveDotsAndBoxes(gameId: string, stmts: GameStatement[]): Deri
     status,
     result,
     moveCount,
+    vsComputer: create.vsComputer ?? false,
     createdAt: create.timestamp,
     updatedAt,
   }
