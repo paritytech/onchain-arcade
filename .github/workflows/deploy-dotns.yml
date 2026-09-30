@@ -1,0 +1,82 @@
+name: Deploy to DotNS (reusable)
+
+# Builds the bundle and publishes it to a DotNS name: content goes to the
+# Polkadot Bulletin chain, then the name's contenthash points at the root CID.
+# Mirrors ../spotlight-mesh/.github/workflows/deploy-dotns.yml.
+#
+# Callers pass the name:
+#   deploy.yml          → onchain-arcade.paseo      (push to master)
+#   deploy-staging.yml  → onchain-arcade-stg.paseo  (manual, any branch)
+#
+# The bundle is name-agnostic: src/lib/host/productIdentifier.ts reads the
+# product id from window.location, so staging gets its own product account.
+#
+# The build pins VITE_CHAIN_GENESIS to paseo-next-v2 Asset Hub. That also picks
+# the `.paseo` DotNS suffix (src/lib/triangle/constants.ts); the default genesis
+# maps to `.dot` and the host would refuse the product account (DomainNotValid).
+
+on:
+  workflow_call:
+    inputs:
+      domain:
+        description: 'DotNS name to deploy to, for example onchain-arcade.paseo'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Without a mnemonic bulletin-deploy silently signs with its public dev phrase.
+  # Separate job because `if:` cannot read secrets.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the DOTNS_MNEMONIC secret
+        env:
+          MNEMONIC: ${{ secrets.DOTNS_MNEMONIC }}
+        run: |
+          if [ -z "$MNEMONIC" ]; then
+            echo "::error title=DOTNS_MNEMONIC secret missing::Cannot deploy ${{ inputs.domain }}. Add the DOTNS_MNEMONIC repo secret for the account that owns the name."
+            exit 1
+          fi
+          echo "DOTNS_MNEMONIC present. Deploying ${{ inputs.domain }}."
+
+  deploy:
+    name: build and deploy (${{ inputs.domain }})
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Install and build
+        run: |
+          npm ci --include=dev
+          npm run build
+        env:
+          VITE_CHAIN_GENESIS: '0x4349b00e54897e21196fd331015fc5be0f14e118beb0375ed2bb1793737bb57a'
+
+      - name: Deploy to Bulletin and DotNS
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 15
+          max_attempts: 3
+          retry_wait_seconds: 30
+          # --js-merkle: pure-JS content addressing, no IPFS Kubo binary.
+          # CLI_VERSION is pinned so a CLI release cannot change a deploy on its
+          # own; keep it in step with the bulletin-deploy devDependency (which
+          # only supplies defineConfig types).
+          command: |
+            echo "Publishing $DOMAIN from ${{ github.ref_name }}. Resolves at https://${DOMAIN%.paseo}.paseo.li"
+            npx -y "bulletin-deploy@$CLI_VERSION" --env paseo-next-v2 --js-merkle './dist' "$DOMAIN"
+        env:
+          DOMAIN: ${{ inputs.domain }}
+          DEPLOY_DOMAIN: ${{ inputs.domain }}
+          CLI_VERSION: '0.18.4'
+          MNEMONIC: ${{ secrets.DOTNS_MNEMONIC }}
+          NODE_OPTIONS: '--max-old-space-size=8192'
