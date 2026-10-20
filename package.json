@@ -41,7 +41,7 @@
     "tailwindcss": "^3.4.16",
     "typescript": "^5.9.3",
     "vite": "^6.4.1",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   },
   "_comment_overrides": "Pin @parity/truapi to ONE version across the tree. @parity/product-sdk-host depends on it; without this override a transitive route can pull a second copy, producing TWO transport singletons whose handshakes never see each other. truapi carries the SCALE codecs, so a skew means the host decodes a message of the wrong shape and dies with 'Offset is outside the bounds of the DataView'. Keep this EQUAL to the version @parity/product-sdk-host depends on (0.17.0 for product-sdk 0.29.0, whose host is 0.21.0) — track the host's declared range, not the registry's latest. Matches ../spotlight-mesh.",
   "overrides": {
