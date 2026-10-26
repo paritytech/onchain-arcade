@@ -2,7 +2,8 @@
 // Mirrors the exports of spotlight-mesh src/sdk/index.ts.
 
 export interface MediaOptions {
-  video: HTMLCanvasElement | MediaStream
+  /** A non-canvas element is painted into the stream (captureElement). */
+  video: HTMLCanvasElement | HTMLElement | MediaStream
   audio?: MediaStream | MediaStreamTrack | null
   fps?: number
 }
@@ -20,8 +21,24 @@ export interface LiveOptions {
 
 export interface StartBroadcastOptions extends MediaOptions, LiveOptions {}
 
+export interface ControlBarOptions {
+  /** Render inside this element. By default the bar floats at the bottom right. */
+  container?: HTMLElement
+}
+
 export interface LaunchScreenOptions extends MediaOptions, Omit<LiveOptions, 'title'> {
   title?: string
+  /** The SDK's on-air bar once live. Default on; false when the app has its own. */
+  controls?: boolean | ControlBarOptions
+}
+
+export interface AttachOptions extends LaunchScreenOptions {
+  onLive?: (live: Broadcast) => void
+}
+
+export interface ElementCapture {
+  readonly canvas: HTMLCanvasElement
+  stop(): void
 }
 
 export interface ChatMessage {
@@ -66,6 +83,12 @@ export function prepareBroadcast(opts: PrepareOptions): Promise<BroadcastPreview
 export function startBroadcast(opts: StartBroadcastOptions): Promise<Broadcast>
 /** Modal with preview, title, camera/mic toggles and Go live. Null on Cancel. */
 export function openLaunchScreen(opts: LaunchScreenOptions): Promise<Broadcast | null>
+/** Wires `button` to the launch screen and reopens it after a permission reload. Returns detach. */
+export function attachLaunchScreen(button: HTMLButtonElement, opts: AttachOptions | (() => AttachOptions)): () => void
+/** The on-air bar for a live stream. Returns a function that removes it. */
+export function mountControlBar(live: Broadcast, opts?: ControlBarOptions): () => void
+/** Paints a DOM subtree into a canvas (snapshots on change; for boards, not fast animation). */
+export function captureElement(el: HTMLElement, width?: number, height?: number): ElementCapture
 /** localStorage key set while the launch screen asks for devices (holds Date.now()). */
 export const LAUNCH_INTENT_KEY: 'spotlight-broadcast.launchIntent'
 export function launchIntentPending(): boolean

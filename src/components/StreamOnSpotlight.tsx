@@ -1,9 +1,10 @@
 // "Stream on Spotlight": broadcasts the match area to Spotlight viewers.
 //
-// The match is rendered as HTML/SVG, so `captureElement` paints it into a
-// canvas. The click opens the SDK's launch screen: a preview of that canvas
-// with the streamer's camera in the corner, a title, and Go live. The SDK and
-// the capture load on the first click only. Hidden outside a Polkadot host:
+// The match is rendered as HTML/SVG; the SDK paints the element into the
+// stream itself. The click opens the SDK's launch screen: a preview of the
+// board with the streamer's camera in the corner, a title, and Go live. The
+// live controls are this header's, not the SDK's bar. The SDK loads on the
+// first click only. Hidden outside a Polkadot host:
 // the SDK signs through the host's Statement Store with this app's account.
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Radio, Square, Copy, Loader2, FileText, Video, VideoOff, Mic, MicOff } from 'lucide-react'
@@ -52,7 +53,6 @@ export function StreamOnSpotlight({ target, title }: { target: RefObject<HTMLEle
    *  Spotlight shows this app's dotNS name. */
   const { displayName } = usePolkadotWallet()
   const [state, setState] = useState<State>({ phase: 'idle' })
-  const stopCapture = useRef<(() => void) | null>(null)
   const liveRef = useRef<Broadcast | null>(null)
   /** Loaded on the first click. Its log is the only record of why a stream
    *  failed, so the copy-log control shows from then on. */
@@ -62,7 +62,6 @@ export function StreamOnSpotlight({ target, title }: { target: RefObject<HTMLEle
   useEffect(
     () => () => {
       void liveRef.current?.end()
-      stopCapture.current?.()
     },
     [],
   )
@@ -82,41 +81,32 @@ export function StreamOnSpotlight({ target, title }: { target: RefObject<HTMLEle
     const el = target.current
     if (!el) return
     setState({ phase: 'launching' })
-    let capture: { canvas: HTMLCanvasElement; stop: () => void } | null = null
     try {
-      const [loaded, { captureElement }] = await Promise.all([
-        import('@/lib/spotlight/spotlight-broadcast.js'),
-        import('@/lib/spotlight/domCapture'),
-      ])
+      const loaded = await import('@/lib/spotlight/spotlight-broadcast.js')
       setSdk(loaded)
-      capture = captureElement(el)
       const live = await loaded.openLaunchScreen({
-        video: capture.canvas,
+        video: el,
         title,
         hostName: displayName ?? undefined,
         spotlightOrigin: SPOTLIGHT_ORIGIN,
+        controls: false,
       })
       if (!live) {
-        capture.stop()
         setState({ phase: 'idle' })
         return
       }
       liveRef.current = live
-      stopCapture.current = capture.stop
       live.on('viewers', (viewers) =>
         setState((s) => (s.phase === 'live' ? { ...s, viewers } : s)),
       )
       live.on('error', ({ message, fatal }) => addNotification(fatal ? 'error' : 'warning', message))
       live.on('ended', () => {
-        stopCapture.current?.()
-        stopCapture.current = null
         liveRef.current = null
         setState({ phase: 'idle' })
       })
       setState({ phase: 'live', live, viewers: 0, camera: live.camera, microphone: live.microphone })
       if (live.roomUrl) await copyLink(live.roomUrl)
     } catch (err) {
-      capture?.stop()
       setState({ phase: 'idle' })
       addNotification('error', `Could not go live: ${err instanceof Error ? err.message : String(err)}`)
     }
