@@ -35,3 +35,6 @@ export interface Broadcast {
 }
 
 export function startBroadcast(opts: StartBroadcastOptions): Promise<Broadcast>
+
+/** The engine log as text (Spotlight debug-log format). The SDK logs to memory only. */
+export function getBroadcastLog(): string

@@ -5,12 +5,14 @@
 // load on the first click only. Hidden outside a Polkadot host: the SDK signs
 // through the host's Statement Store with this app's product account.
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { Radio, Square, Copy, Loader2 } from 'lucide-react'
+import { Radio, Square, Copy, Loader2, FileText } from 'lucide-react'
 
 import { useNotifications } from '@/contexts/NotificationProvider'
 import { cn } from '@/lib/cn'
 import { isInTriangleHost } from '@/lib/triangle/hostDetection'
 import type { Broadcast } from '@/lib/spotlight/spotlight-broadcast'
+
+type Sdk = typeof import('@/lib/spotlight/spotlight-broadcast')
 
 const TAP = 'min-h-[44px] min-w-[44px]'
 const pill =
@@ -31,6 +33,9 @@ export function StreamOnSpotlight({ target, title }: { target: RefObject<HTMLEle
   const [state, setState] = useState<State>({ phase: 'idle' })
   const stopCapture = useRef<(() => void) | null>(null)
   const liveRef = useRef<Broadcast | null>(null)
+  /** Loaded on the first click. Its log is the only record of why a stream
+   *  failed, so the copy-log control shows from then on. */
+  const [sdk, setSdk] = useState<Sdk | null>(null)
 
   // Leaving the match page ends the stream.
   useEffect(
@@ -49,12 +54,13 @@ export function StreamOnSpotlight({ target, title }: { target: RefObject<HTMLEle
     setState({ phase: 'starting' })
     let capture: { canvas: HTMLCanvasElement; stop: () => void } | null = null
     try {
-      const [{ startBroadcast }, { captureElement }] = await Promise.all([
+      const [loaded, { captureElement }] = await Promise.all([
         import('@/lib/spotlight/spotlight-broadcast.js'),
         import('@/lib/spotlight/domCapture'),
       ])
+      setSdk(loaded)
       capture = captureElement(el)
-      const live = await startBroadcast({ video: capture.canvas, title, spotlightOrigin: SPOTLIGHT_ORIGIN })
+      const live = await loaded.startBroadcast({ video: capture.canvas, title, spotlightOrigin: SPOTLIGHT_ORIGIN })
       liveRef.current = live
       stopCapture.current = capture.stop
       live.on('viewers', (viewers) =>
@@ -85,6 +91,21 @@ export function StreamOnSpotlight({ target, title }: { target: RefObject<HTMLEle
     }
   }
 
+  const copyLog = async () => {
+    if (!sdk) return
+    try {
+      await navigator.clipboard.writeText(sdk.getBroadcastLog())
+      addNotification('success', 'Stream log copied.')
+    } catch {
+      addNotification('error', 'Could not copy the stream log.')
+    }
+  }
+  const logButton = sdk && (
+    <button className={pill} onClick={() => void copyLog()} aria-label="Copy stream log">
+      <FileText className="w-4 h-4" />
+    </button>
+  )
+
   if (state.phase === 'live') {
     const { live, viewers } = state
     return (
@@ -101,18 +122,22 @@ export function StreamOnSpotlight({ target, title }: { target: RefObject<HTMLEle
         <button className={pill} onClick={() => void live.end()} aria-label="End stream">
           <Square className="w-4 h-4" /> End
         </button>
+        {logButton}
       </div>
     )
   }
 
   return (
-    <button
-      className={cn(pill, state.phase === 'starting' && 'opacity-70')}
-      onClick={() => void start()}
-      disabled={state.phase === 'starting'}
-    >
-      {state.phase === 'starting' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />}
-      {state.phase === 'starting' ? 'Going live…' : 'Stream on Spotlight'}
-    </button>
+    <div className="flex items-center gap-2">
+      <button
+        className={cn(pill, state.phase === 'starting' && 'opacity-70')}
+        onClick={() => void start()}
+        disabled={state.phase === 'starting'}
+      >
+        {state.phase === 'starting' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />}
+        {state.phase === 'starting' ? 'Going live…' : 'Stream on Spotlight'}
+      </button>
+      {logButton}
+    </div>
   )
 }
