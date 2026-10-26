@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Copy, Share2, RotateCcw, Gamepad2, UserPlus, Info } from 'lucide-react'
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { VoiceBar } from '@/components/VoiceBar'
+import { StreamOnSpotlight } from '@/components/StreamOnSpotlight'
 import { GameBoard, getBestMove } from '@/lib/games/tic-tac-toe'
 import { ConnectFourBoard, getBestColumnMove } from '@/lib/games/connect-four'
 import { NimBoard, getBestNimMove } from '@/lib/games/nim-game'
@@ -37,6 +38,8 @@ export function GamePage() {
   const { addNotification } = useNotifications()
   const [gameNotFound, setGameNotFound] = useState(false)
   const [showRules, setShowRules] = useState(false)
+  /** The match area a Spotlight stream shows: status, players, board. */
+  const streamRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (gameId) {
@@ -358,11 +361,16 @@ export function GamePage() {
         {/* Voice sits in the header row, not beside the board: it is a
             persistent per-match control, and anything adjacent to the board
             competes with the thing the player is actually looking at. */}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <StreamOnSpotlight
+            target={streamRef}
+            title={`${GAME_RULES[activeGame.gameType]?.title ?? 'Arcade'} · Game #${activeGame.id}`}
+          />
           <VoiceBar />
         </div>
       </motion.div>
 
+      <div ref={streamRef} className="space-y-8">
       {/* Status Bar */}
       <motion.div variants={staggerItem}>
         <div className="p-px rounded-2xl bg-gradient-to-br from-brand/30 via-border to-border">
@@ -563,6 +571,7 @@ export function GamePage() {
           />
         )}
       </motion.div>
+      </div>
 
       {/* Game Over Actions */}
       {activeGame.status === 'finished' && (

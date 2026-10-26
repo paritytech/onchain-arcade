@@ -23,7 +23,7 @@ npm install --include=dev
 - **Framework**: React 18 + TypeScript + Vite
 - **Styling**: Tailwind CSS with custom theme tokens
 - **Blockchain**: Polkadot Asset Hub - Paseo testnet
-- **Host SDK**: `@parity/product-sdk` 0.29.0 (host 0.21.0, `@parity/truapi` pinned to 0.17.0 — see the `overrides` note in `package.json`). Versions track `../spotlight-mesh`.
+- **Host SDK**: `@parity/product-sdk` 0.33.0 (host 0.24.0, `@parity/truapi` pinned to 0.23.0 — see the `overrides` note in `package.json`). Versions track `../spotlight-mesh`.
 - **Wallet Integration**: host product account (Desktop / Mobile / browser shell); Talisman, SubWallet, Nova via @talismn/connect-wallets in a plain browser tab
 - **Chain Client**: PAPI v2 singleton at `src/lib/papi/client.ts` (dual-mode: `getHostProvider(genesis)` in a host, direct WebSocket standalone)
 - **State Management**: React Context API (useState) — GameContext + WalletContext
