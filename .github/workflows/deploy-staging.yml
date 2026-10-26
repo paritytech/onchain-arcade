@@ -13,12 +13,12 @@ permissions:
 
 concurrency:
   # Never cancel mid-publish: it can leave the name at a half-uploaded CID.
-  group: deploy-staging
+  group: deploy-test-onchain-arcade
   cancel-in-progress: false
 
 jobs:
   staging:
     uses: ./.github/workflows/deploy-dotns.yml
     with:
-      domain: onchain-arcade-stg.paseo
+      domain: test-onchain-arcade.paseo
     secrets: inherit
