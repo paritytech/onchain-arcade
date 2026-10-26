@@ -30,6 +30,8 @@ export interface LaunchScreenOptions extends MediaOptions, Omit<LiveOptions, 'ti
   title?: string
   /** The SDK's on-air bar once live. Default on; false when the app has its own. */
   controls?: boolean | ControlBarOptions
+  /** Aborting closes the screen (or ends the stream if it is going live). */
+  signal?: AbortSignal
 }
 
 export interface AttachOptions extends LaunchScreenOptions {
@@ -38,6 +40,9 @@ export interface AttachOptions extends LaunchScreenOptions {
 
 export interface ElementCapture {
   readonly canvas: HTMLCanvasElement
+  /** Rejects if the first snapshot fails (e.g. a cross-origin image without CORS). */
+  readonly ready: Promise<void>
+  onError: ((err: Error) => void) | null
   stop(): void
 }
 
@@ -52,6 +57,7 @@ export interface BroadcastEvents {
   viewers: number
   chat: ChatMessage
   reaction: { from: string; emoji: string }
+  /** fatal = the stream has ended; `ended` follows. */
   error: { message: string; fatal: boolean }
   ended: void
 }
@@ -59,6 +65,8 @@ export interface BroadcastEvents {
 export interface DeviceControls {
   readonly camera: boolean
   readonly microphone: boolean
+  /** Turning on a device this frame never held asks the host; on dot.li that may reload the frame. */
+  asksHost(device: 'camera' | 'microphone'): boolean
   setCamera(on: boolean): Promise<void>
   setMicrophone(on: boolean): Promise<void>
 }

@@ -54,6 +54,9 @@ export function StreamOnSpotlight({ target, title }: { target: RefObject<HTMLEle
   const { displayName } = usePolkadotWallet()
   const [state, setState] = useState<State>({ phase: 'idle' })
   const liveRef = useRef<Broadcast | null>(null)
+  /** A device this frame never held may make the host reload the app, which
+   *  ends the stream: the first click warns, a second within 6 s asks. */
+  const armed = useRef({ camera: 0, microphone: 0 })
   /** Loaded on the first click. Its log is the only record of why a stream
    *  failed, so the copy-log control shows from then on. */
   const [sdk, setSdk] = useState<Sdk | null>(null)
@@ -137,6 +140,13 @@ export function StreamOnSpotlight({ target, title }: { target: RefObject<HTMLEle
   )
 
   const toggle = async (live: Broadcast, device: 'camera' | 'microphone') => {
+    const turningOn = device === 'camera' ? !live.camera : !live.microphone
+    if (turningOn && live.asksHost(device) && Date.now() - armed.current[device] > 6_000) {
+      armed.current[device] = Date.now()
+      addNotification('warning', `Polkadot may reload the app to allow the ${device}, which ends the stream. Click again to ask anyway.`)
+      return
+    }
+    armed.current[device] = 0
     try {
       if (device === 'camera') await live.setCamera(!live.camera)
       else await live.setMicrophone(!live.microphone)
